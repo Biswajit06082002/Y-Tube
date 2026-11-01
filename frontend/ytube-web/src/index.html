@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>YTube</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Apply the saved theme before the first paint, so dark-theme users never see a white flash. -->
+  <script>
+    (function () {
+      var theme = 'daylight';
+      try {
+        var saved = localStorage.getItem('ytube.theme') || 'system';
+        theme = saved === 'system'
+          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'midnight' : 'daylight')
+          : saved;
+      } catch (e) {}
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

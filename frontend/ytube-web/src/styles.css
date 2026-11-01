@@ -1,0 +1,335 @@
+@import 'tailwindcss';
+
+/*
+ * Theming: components only use semantic colors (bg-surface, text-muted, bg-accent…).
+ * Each theme just redefines the CSS variables below, so switching theme = changing one
+ * attribute on <html>; no component knows which theme is active.
+ */
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-on-accent: var(--on-accent);
+}
+
+:root,
+[data-theme='daylight'] {
+  color-scheme: light;
+  --bg: #f4f3fa;
+  --surface: #ffffff;
+  --surface-2: #ebe9f5;
+  --line: #e0ddee;
+  --fg: #17142b;
+  --muted: #6b6785;
+  --accent: #6d4aff;
+  --accent-2: #ff4fa3;
+  --on-accent: #ffffff;
+  --glass-tint: color-mix(in oklab, var(--surface) 42%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface) 82%, transparent);
+  --glass-sheen-1: rgb(255 255 255 / 0.6);
+  --glass-sheen-2: rgb(255 255 255 / 0.12);
+  --glass-rim: rgb(255 255 255 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.55);
+  --glass-outline: rgb(30 15 70 / 0.07);
+  --glass-shadow: rgb(70 40 140 / 0.14);
+  --aurora-opacity: 0.6;
+  --aurora-vignette: 0%;
+}
+
+[data-theme='midnight'] {
+  color-scheme: dark;
+  --bg: #050409;
+  --surface: #110f1c;
+  --surface-2: #1b1830;
+  --line: #26233d;
+  --fg: #ecebf7;
+  --muted: #9a97b8;
+  --accent: #8d6dff;
+  --accent-2: #ff5cad;
+  --on-accent: #ffffff;
+  --glass-tint: color-mix(in oklab, var(--surface) 38%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface) 86%, transparent);
+  --glass-sheen-1: rgb(255 255 255 / 0.09);
+  --glass-sheen-2: rgb(255 255 255 / 0.01);
+  --glass-rim: rgb(255 255 255 / 0.16);
+  --glass-border: rgb(255 255 255 / 0.08);
+  --glass-outline: rgb(0 0 0 / 0.3);
+  --glass-shadow: rgb(0 0 0 / 0.5);
+  --aurora-opacity: 0.22;
+  --aurora-vignette: 80%;
+}
+
+[data-theme='ember'] {
+  color-scheme: dark;
+  --bg: #080504;
+  --surface: #170f0c;
+  --surface-2: #251914;
+  --line: #35251e;
+  --fg: #f7ede7;
+  --muted: #b89c8e;
+  --accent: #ff7a3d;
+  --accent-2: #ffc23d;
+  --on-accent: #1a0d05;
+  --glass-tint: color-mix(in oklab, var(--surface) 38%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface) 86%, transparent);
+  --glass-sheen-1: rgb(255 255 255 / 0.09);
+  --glass-sheen-2: rgb(255 255 255 / 0.01);
+  --glass-rim: rgb(255 255 255 / 0.16);
+  --glass-border: rgb(255 255 255 / 0.08);
+  --glass-outline: rgb(0 0 0 / 0.3);
+  --glass-shadow: rgb(0 0 0 / 0.5);
+  --aurora-opacity: 0.22;
+  --aurora-vignette: 80%;
+}
+
+[data-theme='lagoon'] {
+  color-scheme: dark;
+  --bg: #02080a;
+  --surface: #0a181b;
+  --surface-2: #11262b;
+  --line: #1a353b;
+  --fg: #e1f4f3;
+  --muted: #8bb2b5;
+  --accent: #2dd4bf;
+  --accent-2: #60a5fa;
+  --on-accent: #032019;
+  --glass-tint: color-mix(in oklab, var(--surface) 38%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface) 86%, transparent);
+  --glass-sheen-1: rgb(255 255 255 / 0.09);
+  --glass-sheen-2: rgb(255 255 255 / 0.01);
+  --glass-rim: rgb(255 255 255 / 0.16);
+  --glass-border: rgb(255 255 255 / 0.08);
+  --glass-outline: rgb(0 0 0 / 0.3);
+  --glass-shadow: rgb(0 0 0 / 0.5);
+  --aurora-opacity: 0.22;
+  --aurora-vignette: 80%;
+}
+
+[data-theme='sakura'] {
+  color-scheme: light;
+  --bg: #fff5f7;
+  --surface: #ffffff;
+  --surface-2: #fde6ed;
+  --line: #f6d3de;
+  --fg: #2b1520;
+  --muted: #8a6372;
+  --accent: #e11d74;
+  --accent-2: #f59e0b;
+  --on-accent: #ffffff;
+  --glass-tint: color-mix(in oklab, var(--surface) 42%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface) 82%, transparent);
+  --glass-sheen-1: rgb(255 255 255 / 0.6);
+  --glass-sheen-2: rgb(255 255 255 / 0.12);
+  --glass-rim: rgb(255 255 255 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.55);
+  --glass-outline: rgb(30 15 70 / 0.07);
+  --glass-shadow: rgb(70 40 140 / 0.14);
+  --aurora-opacity: 0.6;
+  --aurora-vignette: 0%;
+}
+
+body {
+  @apply bg-bg font-sans text-fg antialiased transition-colors duration-300;
+}
+
+/*
+ * Aurora background: three big blurred blobs in the theme's accent colors, slowly drifting.
+ * Fixed behind everything; the glass surfaces above let it shine through.
+ */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Vignette: fades the glow into the base color towards the edges (dark themes: mostly black). */
+.aurora::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 85% 75% at 50% 35%,
+    transparent 0%,
+    color-mix(in oklab, var(--bg) var(--aurora-vignette), transparent) 100%
+  );
+}
+
+.aurora span {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(110px);
+  opacity: var(--aurora-opacity);
+  transition: opacity 0.4s;
+  will-change: transform;
+}
+
+.aurora span:nth-child(1) {
+  top: -15%;
+  left: -10%;
+  width: 55vw;
+  height: 55vw;
+  background: var(--accent);
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+
+.aurora span:nth-child(2) {
+  top: 20%;
+  right: -15%;
+  width: 45vw;
+  height: 45vw;
+  background: var(--accent-2);
+  animation: drift-b 32s ease-in-out infinite alternate;
+}
+
+.aurora span:nth-child(3) {
+  bottom: -25%;
+  left: 25%;
+  width: 50vw;
+  height: 40vw;
+  background: color-mix(in oklab, var(--accent) 50%, var(--accent-2));
+  opacity: calc(var(--aurora-opacity) * 0.7);
+  animation: drift-c 38s ease-in-out infinite alternate;
+}
+
+@keyframes drift-a {
+  to { transform: translate(12vw, 10vh) scale(1.15); }
+}
+@keyframes drift-b {
+  to { transform: translate(-14vw, 12vh) scale(0.9); }
+}
+@keyframes drift-c {
+  to { transform: translate(-10vw, -14vh) scale(1.1); }
+}
+
+/*
+ * Behind the top bar once the page scrolls: a blur + tint that fades out downwards
+ * (mask-image), so there's no hard edge cutting across the background.
+ */
+.top-fade {
+  position: absolute;
+  inset: 0 0 -28px 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--bg) 75%, transparent), transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(to bottom, black 50%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.top-fade.visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora span { animation: none; }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-xl border border-line/70 bg-surface/70 px-4 py-3 text-fg outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl whitespace-nowrap bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-lg shadow-accent/25 transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+
+  .btn-soft {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line/50 bg-fg/5 px-4 py-2 text-sm font-medium text-fg transition hover:bg-fg/10 active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-ghost-accent {
+    @apply inline-flex items-center gap-2 rounded-xl border border-accent/40 px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl text-fg transition hover:bg-fg/8 active:scale-95;
+  }
+
+  /*
+   * Glass material, in layers:
+   *  1. sheen  — a diagonal white gradient, like light hitting a pane
+   *  2. tint   — a little of the surface color so text has something to sit on
+   *  3. blur   — backdrop-filter frosts whatever is behind (the aurora)
+   *  4. rim    — a bright 1px inner line on the top edge (the "lit edge" of glass)
+   *  5. outline + shadow — separate the pane from the background and give depth
+   */
+  .glass,
+  .panel {
+    background:
+      linear-gradient(150deg, var(--glass-sheen-1), var(--glass-sheen-2) 55%),
+      var(--glass-tint);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 0 0 1px var(--glass-outline),
+      inset 0 1px 0 0 var(--glass-rim),
+      0 24px 48px -24px var(--glass-shadow);
+  }
+
+  /* Popovers and dialogs sit on top of busy content, so they need more body. */
+  .glass-strong {
+    background:
+      linear-gradient(150deg, var(--glass-sheen-1), var(--glass-sheen-2) 55%),
+      var(--glass-tint-strong);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 0 0 1px var(--glass-outline),
+      inset 0 1px 0 0 var(--glass-rim),
+      0 32px 64px -24px var(--glass-shadow);
+  }
+
+  /* Hover state for clickable glass (cards): accent-tinted rim and glow. */
+  .glass-interactive {
+    transition:
+      transform 0.3s ease,
+      box-shadow 0.3s ease,
+      border-color 0.3s ease;
+  }
+  .glass-interactive:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--accent) 40%, var(--glass-border));
+    box-shadow:
+      0 0 0 1px var(--glass-outline),
+      inset 0 1px 0 0 var(--glass-rim),
+      0 28px 56px -24px color-mix(in oklab, var(--accent) 55%, transparent);
+  }
+
+  .panel {
+    @apply rounded-3xl;
+  }
+
+  .nav-item {
+    @apply flex h-11 items-center gap-4 rounded-2xl px-4 text-sm font-medium text-muted transition hover:bg-fg/5 hover:text-fg;
+  }
+
+  .nav-item.active {
+    @apply bg-accent/15 text-accent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--accent)_25%,transparent)];
+  }
+
+  .chip {
+    @apply shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-muted transition hover:bg-fg/5 hover:text-fg;
+  }
+
+  .chip.active {
+    @apply bg-fg text-bg shadow-md shadow-black/10 hover:bg-fg hover:text-bg;
+  }
+
+  .brand-gradient {
+    background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+}

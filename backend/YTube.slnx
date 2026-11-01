@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="BuildingBlocks/YTube.Common/YTube.Common.csproj" />
+  </Folder>
+  <Folder Name="/Gateway/">
+    <Project Path="Gateway/YTube.Gateway/YTube.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/Services/" />
+  <Folder Name="/Services/Auth/">
+    <Project Path="Services/Auth/Auth.Api/Auth.Api.csproj" />
+    <Project Path="Services/Auth/Auth.Application/Auth.Application.csproj" />
+    <Project Path="Services/Auth/Auth.Infrastructure/Auth.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/Feed/">
+    <Project Path="Services/Feed/Feed.Api/Feed.Api.csproj" />
+  </Folder>
+  <Folder Name="/Services/Processing/">
+    <Project Path="Services/Processing/Processing.Worker/Processing.Worker.csproj" />
+  </Folder>
+  <Folder Name="/Services/User/">
+    <Project Path="Services/User/User.Api/User.Api.csproj" />
+  </Folder>
+  <Folder Name="/Services/Video/">
+    <Project Path="Services/Video/Video.Api/Video.Api.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Angular / Node
+node_modules/
+dist/
+.angular/
+
+# Editors / OS
+.idea/
+Thumbs.db
+.DS_Store
+
+# Local-only notes with test credentials
+dev-test-accounts.md

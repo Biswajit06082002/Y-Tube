@@ -1,0 +1,19 @@
+# Infrastructure only, for now. The .NET services and Angular app run directly on the host.
+# Later phases add RabbitMQ, observability tooling, and finally the services themselves.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ytube-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
