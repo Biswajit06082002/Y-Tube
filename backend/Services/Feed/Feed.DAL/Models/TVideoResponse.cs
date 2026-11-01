@@ -1,0 +1,20 @@
+namespace Feed.DAL.Models;
+
+/// <summary>
+/// The JSON shape the Video service returns. Kept in the DAL so a change in Video's API only
+/// touches this model and its mapping — Feed's BLL keeps working with Feed.Entities.FeedVideo.
+/// </summary>
+public class TVideoResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string ChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public long Views { get; set; }
+    public int DurationSeconds { get; set; }
+    public DateTime PublishedAtUtc { get; set; }
+    public int LikeCount { get; set; }
+    public bool LikedByMe { get; set; }
+}

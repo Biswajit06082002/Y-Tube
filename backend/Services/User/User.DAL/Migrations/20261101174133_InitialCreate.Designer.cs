@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using User.DAL.Data;
+using User.DAL.Context;
 
 #nullable disable
 
@@ -25,7 +25,7 @@ namespace User.DAL.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("User.Api.Data.UserPreferences", b =>
+            modelBuilder.Entity("User.DAL.Models.TUserPreferences", b =>
                 {
                     b.Property<Guid>("UserId")
                         .ValueGeneratedOnAdd()

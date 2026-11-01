@@ -16,7 +16,5 @@ public class RefreshToken
     /// <summary>Hash of the token that replaced this one (rotation chain).</summary>
     public string? ReplacedByTokenHash { get; set; }
 
-    public User? User { get; set; }
-
     public bool IsActive => RevokedAtUtc is null && DateTime.UtcNow < ExpiresAtUtc;
 }

@@ -1,5 +1,7 @@
 using System.Net.Http.Json;
 using Feed.BLL.Interfaces;
+using Feed.DAL.Mappings;
+using Feed.DAL.Models;
 using Feed.Entities;
 using YTube.Common.Responses;
 
@@ -18,8 +20,11 @@ public sealed class VideoServiceClient(HttpClient http) : IVideoCatalogClient
         if (!string.IsNullOrWhiteSpace(category))
             url += $"&category={Uri.EscapeDataString(category)}";
 
-        var response = await http.GetFromJsonAsync<ApiResponse<PagedResult<FeedVideo>>>(url, ct);
-        return response?.Data ?? PagedResult<FeedVideo>.Empty(page, pageSize);
+        var response = await http.GetFromJsonAsync<ApiResponse<PagedResult<TVideoResponse>>>(url, ct);
+        if (response?.Data is not { } data)
+            return PagedResult<FeedVideo>.Empty(page, pageSize);
+
+        return new PagedResult<FeedVideo>([.. data.Items.Select(v => v.ToEntity())], data.Page, data.PageSize, data.TotalCount);
     }
 
     public async Task<IReadOnlyList<string>> GetCategoriesAsync(CancellationToken ct = default)

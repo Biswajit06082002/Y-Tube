@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using User.BLL.Interfaces;
-using User.DAL.Data;
+using User.DAL.Context;
 using User.DAL.Repositories;
 
 namespace User.DAL;

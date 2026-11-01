@@ -1,5 +1,5 @@
 using Auth.BLL.Interfaces;
-using Auth.DAL.Data;
+using Auth.DAL.Context;
 using Auth.DAL.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;

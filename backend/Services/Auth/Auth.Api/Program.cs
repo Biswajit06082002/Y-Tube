@@ -1,6 +1,6 @@
 using Auth.BLL;
 using Auth.DAL;
-using Auth.DAL.Data;
+using Auth.DAL.Context;
 using Microsoft.EntityFrameworkCore;
 using YTube.Common.Auth;
 using YTube.Common.Caching;

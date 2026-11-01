@@ -119,7 +119,7 @@ public sealed class AuthService(
         if (user is null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(request.Password ?? string.Empty, user.PasswordHash))
             return Error.Unauthorized("invalid_credentials", "Email or password is incorrect.");
 
-        user.LastLoginAtUtc = DateTime.UtcNow;
+        await users.UpdateLastLoginAsync(user.Id, DateTime.UtcNow, ct);
         var tokens = await IssueTokensAsync(user, ct);
         await unitOfWork.SaveChangesAsync(ct);
         return tokens;
@@ -128,7 +128,8 @@ public sealed class AuthService(
     public async Task<Result<AuthTokensResponse>> RefreshAsync(RefreshRequest request, CancellationToken ct = default)
     {
         var existing = await refreshTokens.GetByHashAsync(tokenService.HashRefreshToken(request.RefreshToken), ct);
-        if (existing?.User is null)
+        var user = existing is null ? null : await users.GetByIdAsync(existing.UserId, ct);
+        if (existing is null || user is null)
             return Error.Unauthorized("invalid_refresh_token", "Session expired. Please log in again.");
 
         if (!existing.IsActive)
@@ -139,7 +140,7 @@ public sealed class AuthService(
                 && DateTime.UtcNow - revokedAt < RotationGracePeriod
                 && DateTime.UtcNow < existing.ExpiresAtUtc)
             {
-                var raceTokens = await IssueTokensAsync(existing.User, ct);
+                var raceTokens = await IssueTokensAsync(user, ct);
                 await unitOfWork.SaveChangesAsync(ct);
                 return raceTokens;
             }
@@ -155,9 +156,8 @@ public sealed class AuthService(
         }
 
         // Rotation: every refresh hands out a new refresh token and retires the old one.
-        var tokens = await IssueTokensAsync(existing.User, ct);
-        existing.RevokedAtUtc = DateTime.UtcNow;
-        existing.ReplacedByTokenHash = tokenService.HashRefreshToken(tokens.RefreshToken);
+        var tokens = await IssueTokensAsync(user, ct);
+        await refreshTokens.RevokeAsync(existing.Id, tokenService.HashRefreshToken(tokens.RefreshToken), ct);
         await unitOfWork.SaveChangesAsync(ct);
         return tokens;
     }
@@ -167,7 +167,7 @@ public sealed class AuthService(
         var existing = await refreshTokens.GetByHashAsync(tokenService.HashRefreshToken(request.RefreshToken), ct);
         if (existing is { IsActive: true })
         {
-            existing.RevokedAtUtc = DateTime.UtcNow;
+            await refreshTokens.RevokeAsync(existing.Id, replacedByTokenHash: null, ct);
             await unitOfWork.SaveChangesAsync(ct);
         }
         return true;

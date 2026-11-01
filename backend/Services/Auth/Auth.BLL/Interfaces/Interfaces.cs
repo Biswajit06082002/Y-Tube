@@ -22,16 +22,22 @@ public interface IUserRepository
 {
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
     Task<User?> GetByEmailAsync(string email, CancellationToken ct = default);
+    Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task AddAsync(User user, CancellationToken ct = default);
+    Task UpdateLastLoginAsync(Guid userId, DateTime lastLoginAtUtc, CancellationToken ct = default);
 }
 
 public interface IRefreshTokenRepository
 {
     Task<RefreshToken?> GetByHashAsync(string tokenHash, CancellationToken ct = default);
     Task AddAsync(RefreshToken token, CancellationToken ct = default);
+
+    /// <param name="replacedByTokenHash">Set when revoked by rotation; null when revoked by logout.</param>
+    Task RevokeAsync(Guid tokenId, string? replacedByTokenHash, CancellationToken ct = default);
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);
 }
 
+/// <summary>Commits everything the repositories staged, in one database transaction.</summary>
 public interface IUnitOfWork
 {
     Task<int> SaveChangesAsync(CancellationToken ct = default);

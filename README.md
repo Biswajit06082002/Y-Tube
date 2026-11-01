@@ -53,8 +53,13 @@ backend/
   Services/<Name>/                Auth, User, Video, Feed — each split into 4 class-library layers:
     <Name>.Api                    controllers + Program.cs only (no logic); wires BLL + DAL via DI
     <Name>.BLL                    all business logic (Services/) + the interfaces it needs (Interfaces/)
-    <Name>.DAL                    data access only: DbContext, repositories, migrations, HTTP clients
-    <Name>.Entities               entities + request/response DTOs; references nothing
+    <Name>.DAL                    data access only, in folders:
+      Context/                    DbContext (Video: in-memory context until Phase 2)
+      Models/                     table models, T-prefixed (TUser, TRefreshToken, TVideo…)
+      Mappings/                   table model ⇄ entity conversion
+      Repositories/               implement the BLL's repository interfaces
+      Migrations/                 EF Core migrations (Feed has Clients/ instead: its data comes over HTTP)
+    <Name>.Entities               business entities + request/response DTOs the BLL works with; references nothing
   Services/Processing/Processing.Worker   background worker (no layers yet)
 frontend/ytube-web                Angular 21 app
 scripts/run-backend.ps1           build + start every service in its own window

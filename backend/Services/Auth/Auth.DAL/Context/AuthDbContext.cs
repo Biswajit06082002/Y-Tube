@@ -1,8 +1,8 @@
 using Auth.BLL.Interfaces;
-using Auth.Entities;
+using Auth.DAL.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Auth.DAL.Data;
+namespace Auth.DAL.Context;
 
 /// <summary>
 /// Auth owns its own database (AuthDb). No other service reads these tables directly —
@@ -10,12 +10,12 @@ namespace Auth.DAL.Data;
 /// </summary>
 public sealed class AuthDbContext(DbContextOptions<AuthDbContext> options) : DbContext(options), IUnitOfWork
 {
-    public DbSet<User> Users => Set<User>();
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<TUser> Users => Set<TUser>();
+    public DbSet<TRefreshToken> RefreshTokens => Set<TRefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<User>(user =>
+        modelBuilder.Entity<TUser>(user =>
         {
             user.ToTable("Users");
             user.HasKey(u => u.Id);
@@ -24,14 +24,13 @@ public sealed class AuthDbContext(DbContextOptions<AuthDbContext> options) : DbC
             user.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
         });
 
-        modelBuilder.Entity<RefreshToken>(token =>
+        modelBuilder.Entity<TRefreshToken>(token =>
         {
             token.ToTable("RefreshTokens");
             token.HasKey(t => t.Id);
             token.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
             token.HasIndex(t => t.TokenHash).IsUnique();
             token.Property(t => t.ReplacedByTokenHash).HasMaxLength(64);
-            token.Ignore(t => t.IsActive);
             token.HasOne(t => t.User)
                  .WithMany(u => u.RefreshTokens)
                  .HasForeignKey(t => t.UserId)

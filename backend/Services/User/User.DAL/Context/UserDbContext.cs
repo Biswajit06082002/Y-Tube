@@ -1,16 +1,16 @@
 using Microsoft.EntityFrameworkCore;
-using User.Entities;
+using User.DAL.Models;
 
-namespace User.DAL.Data;
+namespace User.DAL.Context;
 
 /// <summary>The User service's own database (YTube_UserDb) — "database per service".</summary>
 public sealed class UserDbContext(DbContextOptions<UserDbContext> options) : DbContext(options)
 {
-    public DbSet<UserPreferences> Preferences => Set<UserPreferences>();
+    public DbSet<TUserPreferences> Preferences => Set<TUserPreferences>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<UserPreferences>(prefs =>
+        modelBuilder.Entity<TUserPreferences>(prefs =>
         {
             prefs.ToTable("UserPreferences");
             prefs.HasKey(p => p.UserId);
