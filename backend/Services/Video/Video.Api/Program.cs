@@ -1,4 +1,5 @@
-using Video.Api.Catalog;
+using Video.BLL;
+using Video.DAL;
 using YTube.Common.Auth;
 using YTube.Common.Web;
 
@@ -7,7 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddServiceDefaults();
 builder.Services.AddYTubeJwtAuthentication(builder.Configuration);
-builder.Services.AddSingleton<VideoCatalog>();
+builder.Services.AddVideoBll();
+builder.Services.AddVideoDal();
 
 var app = builder.Build();
 

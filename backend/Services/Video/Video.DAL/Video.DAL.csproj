@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DAL: data access only. Implements the repository interfaces declared in the BLL. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Video.BLL\Video.BLL.csproj" />
+    <ProjectReference Include="..\Video.Entities\Video.Entities.csproj" />
+  </ItemGroup>
+
+</Project>

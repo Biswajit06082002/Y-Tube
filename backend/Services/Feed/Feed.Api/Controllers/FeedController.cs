@@ -1,4 +1,6 @@
-using Feed.Api.Clients;
+using System.IdentityModel.Tokens.Jwt;
+using Feed.BLL.Interfaces;
+using Feed.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using YTube.Common.Responses;
@@ -7,31 +9,26 @@ namespace Feed.Api.Controllers;
 
 [ApiController]
 [Route("api/feed")]
-public sealed class FeedController(VideoServiceClient videos) : ControllerBase
+public sealed class FeedController(IFeedService feed) : ControllerBase
 {
     [HttpGet("ping")]
     public IActionResult Ping() => Ok(ApiResponse<string>.Ok("Feed service is up"));
 
-    /// <summary>
-    /// Home feed — public, like YouTube's home page. Everyone gets the same feed for now;
-    /// once we know the user (token present) this is where personalised ranking / ML plugs in.
-    /// </summary>
+    /// <summary>Home feed — public, like a video site's home page.</summary>
     [HttpGet]
-    public async Task<IActionResult> Home(int page = 1, int pageSize = 12, string? category = null, CancellationToken ct = default)
-    {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 50);
-        var result = await videos.GetVideosAsync(page, pageSize, category, ct);
-        return Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(result));
-    }
+    public async Task<IActionResult> Home(int page = 1, int pageSize = 12, string? category = null, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(await feed.HomeAsync(page, pageSize, category, ct)));
 
     [HttpGet("categories")]
     public async Task<IActionResult> Categories(CancellationToken ct) =>
-        Ok(ApiResponse<IReadOnlyList<string>>.Ok(await videos.GetCategoriesAsync(ct)));
+        Ok(ApiResponse<IReadOnlyList<string>>.Ok(await feed.CategoriesAsync(ct)));
 
-    /// <summary>Videos from subscribed channels. Needs a login; empty until the User service tracks subscriptions.</summary>
+    /// <summary>Videos from followed creators. Needs a login.</summary>
     [Authorize]
     [HttpGet("subscriptions")]
-    public IActionResult Subscriptions(int page = 1, int pageSize = 12) =>
-        Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(PagedResult<FeedVideo>.Empty(page, pageSize)));
+    public async Task<IActionResult> Subscriptions(int page = 1, int pageSize = 12, CancellationToken ct = default)
+    {
+        var userId = Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
+        return Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(await feed.SubscriptionsAsync(userId, page, pageSize, ct)));
+    }
 }

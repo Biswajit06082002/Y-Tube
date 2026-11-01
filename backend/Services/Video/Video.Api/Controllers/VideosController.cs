@@ -1,7 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Video.Api.Catalog;
+using Video.BLL.Interfaces;
+using Video.Entities.Contracts;
 using YTube.Common.Responses;
 
 namespace Video.Api.Controllers;
@@ -13,47 +14,41 @@ namespace Video.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/videos")]
-public sealed class VideosController(VideoCatalog catalog) : ControllerBase
+public sealed class VideosController(IVideoService videos) : ControllerBase
 {
-    private const int MaxPageSize = 50;
-
     private string? UserId => User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
 
     [HttpGet("ping")]
     public IActionResult Ping() => Ok(ApiResponse<string>.Ok("Video service is up"));
 
     [HttpGet]
-    public IActionResult List(int page = 1, int pageSize = 12, string? category = null)
-    {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
-
-        var (items, total) = catalog.List(page, pageSize, category, UserId);
-        return Ok(ApiResponse<PagedResult<VideoDto>>.Ok(new PagedResult<VideoDto>(items, page, pageSize, total)));
-    }
+    public async Task<IActionResult> List(int page = 1, int pageSize = 12, string? category = null, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<VideoDto>>.Ok(await videos.ListAsync(page, pageSize, category, UserId, ct)));
 
     [HttpGet("categories")]
-    public IActionResult Categories() => Ok(ApiResponse<IReadOnlyList<string>>.Ok(catalog.Categories));
+    public async Task<IActionResult> Categories(CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<string>>.Ok(await videos.CategoriesAsync(ct)));
 
     [HttpGet("{id}")]
-    public IActionResult Get(string id) =>
-        catalog.Get(id, UserId) is { } video
-            ? Ok(ApiResponse<VideoDto>.Ok(video))
-            : NotFound(ApiResponse<VideoDto>.Fail("video_not_found", "This video isn't available."));
+    public async Task<IActionResult> Get(string id, CancellationToken ct) =>
+        VideoResult(await videos.GetAsync(id, UserId, ct));
 
     [Authorize]
     [HttpGet("liked")]
-    public IActionResult Liked() => Ok(ApiResponse<IReadOnlyList<VideoDto>>.Ok(catalog.LikedBy(UserId!)));
+    public async Task<IActionResult> Liked(CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<VideoDto>>.Ok(await videos.LikedByAsync(UserId!, ct)));
 
     [Authorize]
     [HttpPut("{id}/like")]
-    public IActionResult Like(string id) => LikeResult(catalog.SetLike(id, UserId!, liked: true));
+    public async Task<IActionResult> Like(string id, CancellationToken ct) =>
+        VideoResult(await videos.SetLikeAsync(id, UserId!, liked: true, ct));
 
     [Authorize]
     [HttpDelete("{id}/like")]
-    public IActionResult Unlike(string id) => LikeResult(catalog.SetLike(id, UserId!, liked: false));
+    public async Task<IActionResult> Unlike(string id, CancellationToken ct) =>
+        VideoResult(await videos.SetLikeAsync(id, UserId!, liked: false, ct));
 
-    private IActionResult LikeResult(VideoDto? video) =>
+    private IActionResult VideoResult(VideoDto? video) =>
         video is not null
             ? Ok(ApiResponse<VideoDto>.Ok(video))
             : NotFound(ApiResponse<VideoDto>.Fail("video_not_found", "This video isn't available."));

@@ -18,6 +18,7 @@ Every section ends with self-check questions.
 | **Caching with TTL** | Pending sign-ups in Redis (5 min) | Short-lived data that should disappear on its own doesn't belong in SQL. |
 | **Health checks** | `/health` on every service | Load balancers and orchestrators need to know whether an instance is alive. |
 | **Correlation IDs** | `CorrelationIdMiddleware` | One ID follows a request across all services' logs, which is the first step towards distributed tracing. |
+| **Layered services (Api / BLL / DAL / Entities)** | `Services/<Name>/*` | Controllers stay thin, all rules live in the BLL, and the DAL implements interfaces the BLL declares (dependency inversion), so business logic never depends on EF Core or SQL. |
 | **Centralised error handling** | `GlobalExceptionHandler`, `Result<T>` | Expected failures are values (`Result`); real bugs are logged once and become a clean 500 with a reference ID. |
 
 **Self-check:** Why does every service validate the JWT again if the gateway already did? *(Defense in depth: a service might be reached without going through the gateway, e.g. from inside the network.)*

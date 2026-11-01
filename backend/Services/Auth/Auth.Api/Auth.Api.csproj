@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <!-- API: controllers + startup only. References BLL/DAL so it can wire everything up with DI. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -14,8 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Auth.Application\Auth.Application.csproj" />
-    <ProjectReference Include="..\Auth.Infrastructure\Auth.Infrastructure.csproj" />
+    <ProjectReference Include="..\Auth.BLL\Auth.BLL.csproj" />
+    <ProjectReference Include="..\Auth.DAL\Auth.DAL.csproj" />
+    <ProjectReference Include="..\Auth.Entities\Auth.Entities.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Common\YTube.Common.csproj" />
   </ItemGroup>
 

@@ -47,18 +47,33 @@ Browsing is public like YouTube; acting as a user needs a login. Four layers enf
 ```
 backend/
   YTube.slnx
-  BuildingBlocks/YTube.Common     shared: ApiResponse, Result, JWT setup, Redis cache,
-                                  correlation-id middleware, global exception handler
-  Gateway/YTube.Gateway           YARP reverse proxy (routes in appsettings.json)
-  Services/Auth/Auth.Api          controllers (HTTP layer)
-  Services/Auth/Auth.Application  business logic (old "BLL") + domain + interfaces
-  Services/Auth/Auth.Infrastructure  EF Core, JWT, email (old "DAL")
-  Services/User|Video|Feed/*.Api  placeholders, built out in later phases
-  Services/Processing/Processing.Worker
+  BuildingBlocks/YTube.Common     shared: ApiResponse, Result, PagedResult, JWT setup, Redis cache,
+                                  correlation-id + header propagation, global exception handler
+  Gateway/YTube.Gateway           YARP reverse proxy (routes in appsettings.json) — no business logic
+  Services/<Name>/                Auth, User, Video, Feed — each split into 4 class-library layers:
+    <Name>.Api                    controllers + Program.cs only (no logic); wires BLL + DAL via DI
+    <Name>.BLL                    all business logic (Services/) + the interfaces it needs (Interfaces/)
+    <Name>.DAL                    data access only: DbContext, repositories, migrations, HTTP clients
+    <Name>.Entities               entities + request/response DTOs; references nothing
+  Services/Processing/Processing.Worker   background worker (no layers yet)
 frontend/ytube-web                Angular 21 app
 scripts/run-backend.ps1           build + start every service in its own window
 docker-compose.yml                Redis
 ```
+
+### How the layers reference each other
+
+```
+<Name>.Api ──► <Name>.BLL ◄── <Name>.DAL
+     │              │              │
+     └──────────────┴──► <Name>.Entities ◄┘
+```
+
+Classic N-tier with one tweak (dependency inversion): the **BLL declares the interfaces**
+(`IUserRepository`, `IVideoRepository`, …) and the **DAL implements them**, so the DAL references
+the BLL — never the other way round. The BLL has no EF Core / SQL / HTTP code at all, so it can be
+unit-tested with fakes, and swapping storage (e.g. Video's in-memory repository → SQL) only touches
+the DAL. Each layer exposes one DI extension (`AddAuthBll`, `AddAuthDal`, …) called from `Program.cs`.
 
 ## Running locally
 
@@ -76,11 +91,11 @@ cd frontend\ytube-web; npm start     # 3. http://localhost:4200
   (for Gmail use an App Password; don't commit it).
 - API explorer for each service: `http://localhost:500X/scalar`. Health: `http://localhost:500X/health`.
 
-New migration after changing Auth entities:
+New migration after changing entities (example: Auth; same pattern for User):
 
 ```powershell
 cd backend
-dotnet ef migrations add <Name> --project Services/Auth/Auth.Infrastructure --startup-project Services/Auth/Auth.Api --output-dir Persistence/Migrations
+dotnet ef migrations add <Name> --project Services/Auth/Auth.DAL --startup-project Services/Auth/Auth.Api --output-dir Migrations
 ```
 
 ## Auth flow

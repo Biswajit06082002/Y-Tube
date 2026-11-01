@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using User.Api.Data;
-using User.Api.Preferences;
+using User.BLL;
+using User.DAL;
+using User.DAL.Data;
 using YTube.Common.Auth;
 using YTube.Common.Caching;
 using YTube.Common.Web;
@@ -12,9 +13,8 @@ builder.Services.AddServiceDefaults();
 builder.Services.AddYTubeJwtAuthentication(builder.Configuration);
 builder.Services.AddYTubeRedis(builder.Configuration);
 
-builder.Services.AddDbContext<UserDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("UserDb"), sql => sql.EnableRetryOnFailure()));
-builder.Services.AddScoped<PreferencesService>();
+builder.Services.AddUserBll();
+builder.Services.AddUserDal(builder.Configuration);
 
 var app = builder.Build();
 

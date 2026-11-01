@@ -1,7 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using User.Api.Preferences;
+using User.BLL.Interfaces;
+using User.Entities.Contracts;
 using YTube.Common.Responses;
 using YTube.Common.Results;
 
@@ -10,7 +11,7 @@ namespace User.Api.Controllers;
 [ApiController]
 [Route("api/users")]
 [Authorize]
-public sealed class UsersController(PreferencesService preferences) : ControllerBase
+public sealed class UsersController(IPreferencesService preferences) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
 

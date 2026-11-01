@@ -8,19 +8,29 @@
   <Folder Name="/Services/" />
   <Folder Name="/Services/Auth/">
     <Project Path="Services/Auth/Auth.Api/Auth.Api.csproj" />
-    <Project Path="Services/Auth/Auth.Application/Auth.Application.csproj" />
-    <Project Path="Services/Auth/Auth.Infrastructure/Auth.Infrastructure.csproj" />
+    <Project Path="Services/Auth/Auth.BLL/Auth.BLL.csproj" />
+    <Project Path="Services/Auth/Auth.DAL/Auth.DAL.csproj" />
+    <Project Path="Services/Auth/Auth.Entities/Auth.Entities.csproj" />
   </Folder>
   <Folder Name="/Services/Feed/">
     <Project Path="Services/Feed/Feed.Api/Feed.Api.csproj" />
+    <Project Path="Services/Feed/Feed.BLL/Feed.BLL.csproj" />
+    <Project Path="Services/Feed/Feed.DAL/Feed.DAL.csproj" />
+    <Project Path="Services/Feed/Feed.Entities/Feed.Entities.csproj" />
   </Folder>
   <Folder Name="/Services/Processing/">
     <Project Path="Services/Processing/Processing.Worker/Processing.Worker.csproj" />
   </Folder>
   <Folder Name="/Services/User/">
     <Project Path="Services/User/User.Api/User.Api.csproj" />
+    <Project Path="Services/User/User.BLL/User.BLL.csproj" />
+    <Project Path="Services/User/User.DAL/User.DAL.csproj" />
+    <Project Path="Services/User/User.Entities/User.Entities.csproj" />
   </Folder>
   <Folder Name="/Services/Video/">
     <Project Path="Services/Video/Video.Api/Video.Api.csproj" />
+    <Project Path="Services/Video/Video.BLL/Video.BLL.csproj" />
+    <Project Path="Services/Video/Video.DAL/Video.DAL.csproj" />
+    <Project Path="Services/Video/Video.Entities/Video.Entities.csproj" />
   </Folder>
 </Solution>

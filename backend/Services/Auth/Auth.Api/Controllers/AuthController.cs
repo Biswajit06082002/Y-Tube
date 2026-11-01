@@ -1,5 +1,5 @@
-using Auth.Application;
-using Auth.Application.Contracts;
+using Auth.BLL.Interfaces;
+using Auth.Entities.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using YTube.Common.Results;
 
