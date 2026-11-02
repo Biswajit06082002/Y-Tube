@@ -1,4 +1,5 @@
 import { Component, computed, input } from '@angular/core';
+import { mediaUrl } from '../core/videos/video.service';
 import { Icon } from './icon';
 import { duration, hueFor } from './format';
 
@@ -12,12 +13,16 @@ import { duration, hueFor } from './format';
       [class]="rounded() + (fill() ? ' h-full min-h-56' : ' aspect-video')"
       [style.background]="background()"
     >
-      <span
-        class="absolute inset-0 flex items-center justify-center font-display text-4xl font-bold tracking-tight text-white/25 select-none sm:text-5xl"
-        aria-hidden="true"
-      >
-        {{ glyph() }}
-      </span>
+      @if (src()) {
+        <img [src]="src()" alt="" loading="lazy" class="absolute inset-0 h-full w-full object-cover" />
+      } @else {
+        <span
+          class="absolute inset-0 flex items-center justify-center font-display text-4xl font-bold tracking-tight text-white/25 select-none sm:text-5xl"
+          aria-hidden="true"
+        >
+          {{ glyph() }}
+        </span>
+      }
       @if (category()) {
         <span class="absolute top-2.5 left-2.5 rounded-full bg-black/30 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
           {{ category() }}
@@ -39,12 +44,15 @@ import { duration, hueFor } from './format';
 export class VideoThumbnail {
   readonly videoId = input.required<string>();
   readonly title = input('');
+  /** Real thumbnail (relative "/media/…" path). Without one, a gradient is generated from the id. */
+  readonly imageUrl = input<string | null>(null);
   readonly category = input('');
   readonly seconds = input(0);
   readonly rounded = input('rounded-2xl');
   /** Fill the parent's height instead of keeping a 16:9 box (used by the hero). */
   readonly fill = input(false);
 
+  protected readonly src = computed(() => mediaUrl(this.imageUrl()));
   protected readonly length = computed(() => duration(this.seconds()));
   protected readonly glyph = computed(() =>
     this.title()

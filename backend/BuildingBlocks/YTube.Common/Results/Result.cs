@@ -7,7 +7,8 @@ public enum ErrorType
     NotFound,
     Conflict,
     TooManyRequests,
-    Gone
+    Gone,
+    Unavailable
 }
 
 public sealed record Error(string Code, string Message, ErrorType Type)
@@ -18,6 +19,7 @@ public sealed record Error(string Code, string Message, ErrorType Type)
     public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
     public static Error TooManyRequests(string code, string message) => new(code, message, ErrorType.TooManyRequests);
     public static Error Gone(string code, string message) => new(code, message, ErrorType.Gone);
+    public static Error Unavailable(string code, string message) => new(code, message, ErrorType.Unavailable);
 }
 
 /// <summary>

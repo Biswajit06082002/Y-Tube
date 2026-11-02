@@ -1,15 +1,16 @@
-using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Video.DAL.Models;
 
 namespace Video.DAL.Context;
 
 /// <summary>
-/// In-memory "database" for videos until uploads are built (Phase 2) — plays the role a DbContext
-/// will play then. Data is generated from a fixed seed, so ids stay the same across restarts.
-/// Likes live in memory and reset on restart.
+/// Development helper: applies migrations and seeds the sample videos once, so the feed isn't empty
+/// before anyone uploads. Sample videos have no media files — the UI shows generated thumbnails for them.
 /// </summary>
-public sealed class InMemoryVideoContext
+public static class VideoDbInitializer
 {
+    private const int ReadyStatus = 2; // VideoStatus.Ready
+
     private static readonly (string Category, string[] Titles)[] Seed =
     [
         ("System Design", ["Designing YouTube from scratch", "Rate limiting explained in 10 minutes", "Consistent hashing, visually", "How Netflix serves video at scale", "CAP theorem without the jargon", "Caching strategies you should know"]),
@@ -28,11 +29,13 @@ public sealed class InMemoryVideoContext
         ("ch_masalalab", "Masala Lab"), ("ch_roamfree", "Roam Free"), ("ch_datadesk", "Data Desk")
     ];
 
-    public InMemoryVideoContext()
+    public static async Task InitializeAsync(VideoDbContext db, CancellationToken ct = default)
     {
-        var random = new Random(42);
+        await db.Database.MigrateAsync(ct);
+        if (await db.Videos.AnyAsync(ct)) return;
+
+        var random = new Random(42); // fixed seed → same ids every time
         var now = DateTime.UtcNow;
-        var videos = new List<TVideo>();
 
         foreach (var (category, titles) in Seed)
         {
@@ -40,36 +43,29 @@ public sealed class InMemoryVideoContext
             {
                 var channel = Channels[random.Next(Channels.Length)];
                 var views = (long)Math.Pow(10, 2 + random.NextDouble() * 5);
-                videos.Add(new TVideo
+                var published = now.AddHours(-random.Next(2, 24 * 400));
+                db.Videos.Add(new TVideo
                 {
                     Id = NewId(random),
                     Title = title,
-                    Description = $"{title}. A sample video in {category} from {channel.Name}. " +
-                                  "Real uploads and descriptions arrive with the Video service in Phase 2.",
+                    Description = $"{title}. A sample video in {category} from {channel.Name}. Upload your own to see real playback.",
                     Category = category,
                     ChannelId = channel.Id,
                     ChannelName = channel.Name,
                     Views = views,
+                    BaseLikes = (int)(views * (0.01 + random.NextDouble() * 0.04)),
+                    Status = ReadyStatus,
+                    ProcessingProgress = 100,
                     DurationSeconds = random.Next(45, 3600),
-                    PublishedAtUtc = now.AddHours(-random.Next(2, 24 * 400)),
-                    BaseLikes = (int)(views * (0.01 + random.NextDouble() * 0.04))
+                    CreatedAtUtc = published,
+                    PublishedAtUtc = published,
+                    Tags = [new TVideoTag { Tag = category.ToLowerInvariant().Replace(" & ", "-").Replace(' ', '-') }]
                 });
             }
         }
 
-        // Shuffle once so the feed mixes categories.
-        Videos = [.. videos.OrderBy(_ => random.Next())];
-        VideosById = Videos.ToDictionary(v => v.Id);
-        Categories = [.. Seed.Select(s => s.Category)];
+        await db.SaveChangesAsync(ct);
     }
-
-    /// <summary>"Videos table".</summary>
-    public IReadOnlyList<TVideo> Videos { get; }
-    public IReadOnlyDictionary<string, TVideo> VideosById { get; }
-    public IReadOnlyList<string> Categories { get; }
-
-    /// <summary>"VideoLikes table": videoId → set of userIds. Concurrent because requests run in parallel.</summary>
-    public ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> Likes { get; } = new();
 
     private static string NewId(Random random)
     {

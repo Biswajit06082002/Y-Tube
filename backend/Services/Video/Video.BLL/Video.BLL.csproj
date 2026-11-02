@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Video.Entities\Video.Entities.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Common\YTube.Common.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Contracts\YTube.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

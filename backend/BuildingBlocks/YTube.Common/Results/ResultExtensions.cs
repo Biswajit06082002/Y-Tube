@@ -21,6 +21,7 @@ public static class ResultExtensions
             ErrorType.Conflict => StatusCodes.Status409Conflict,
             ErrorType.TooManyRequests => StatusCodes.Status429TooManyRequests,
             ErrorType.Gone => StatusCodes.Status410Gone,
+            ErrorType.Unavailable => StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest
         };
 

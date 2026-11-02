@@ -17,4 +17,9 @@ public class TVideoResponse
     public DateTime PublishedAtUtc { get; set; }
     public int LikeCount { get; set; }
     public bool LikedByMe { get; set; }
+    public List<string> Tags { get; set; } = [];
+    public string? ThumbnailUrl { get; set; }
+    public string? StreamUrl { get; set; }
+    public List<string> Qualities { get; set; } = [];
+    public string Status { get; set; } = string.Empty;
 }

@@ -29,7 +29,7 @@ const PAGE_SIZE = 12;
     @if (featured(); as f) {
       <!-- Featured hero: only on the unfiltered feed -->
       <a [routerLink]="['/watch', f.id]" class="group panel glass-interactive relative mt-1 mb-6 grid overflow-hidden md:grid-cols-[1.3fr_1fr]">
-        <app-video-thumbnail [videoId]="f.id" [title]="f.title" [seconds]="f.durationSeconds" rounded="rounded-none" [fill]="true" />
+        <app-video-thumbnail [videoId]="f.id" [title]="f.title" [imageUrl]="f.thumbnailUrl" [seconds]="f.durationSeconds" rounded="rounded-none" [fill]="true" />
         <div class="relative flex flex-col justify-center gap-3 p-6 md:p-10">
           <span class="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent/12 px-3 py-1 text-xs font-semibold text-accent">
             <app-icon name="sparkle" [size]="14" /> Featured · {{ f.category }}

@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { guestGuard } from './core/auth/auth.guards';
+import { authGuard, guestGuard } from './core/auth/auth.guards';
 import { Shell } from './layout/shell';
 
 /**
@@ -17,6 +17,9 @@ export const routes: Routes = [
       { path: 'feed/subscriptions', loadComponent: () => import('./features/library/library-pages').then((m) => m.Subscriptions) },
       { path: 'feed/history', loadComponent: () => import('./features/library/library-pages').then((m) => m.History) },
       { path: 'feed/liked', loadComponent: () => import('./features/library/library-pages').then((m) => m.Liked) },
+      { path: 'feed/uploads', loadComponent: () => import('./features/library/library-pages').then((m) => m.MyVideos) },
+      // Uploading makes no sense signed out, so this page redirects to /login instead of showing a prompt.
+      { path: 'upload', canActivate: [authGuard], loadComponent: () => import('./features/upload/upload').then((m) => m.Upload) },
     ],
   },
   { path: 'login', canActivate: [guestGuard], loadComponent: () => import('./features/auth/login/login').then((m) => m.Login) },

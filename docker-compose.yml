@@ -1,5 +1,5 @@
 # Infrastructure only, for now. The .NET services and Angular app run directly on the host.
-# Later phases add RabbitMQ, observability tooling, and finally the services themselves.
+# Later phases add observability tooling, and finally the services themselves.
 services:
   redis:
     image: redis:7-alpine
@@ -15,5 +15,26 @@ services:
       timeout: 3s
       retries: 5
 
+  # Message broker: the Video service publishes "video.uploaded", the Processing worker consumes it.
+  # Management UI: http://localhost:15672 (user/password: ytube / ytube — local dev only)
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: ytube-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ytube
+      RABBITMQ_DEFAULT_PASS: ytube
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   redis-data:
+  rabbitmq-data:

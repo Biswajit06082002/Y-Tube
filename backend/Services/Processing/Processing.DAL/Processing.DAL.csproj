@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DAL: data access only. Implements the repository interfaces declared in the BLL. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Processing.BLL\Processing.BLL.csproj" />
+    <ProjectReference Include="..\Processing.Entities\Processing.Entities.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Common\YTube.Common.csproj" />
+  </ItemGroup>
+
+</Project>

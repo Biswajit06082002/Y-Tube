@@ -1,8 +1,10 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { Video, VideoService } from '../../core/videos/video.service';
+import { compactNumber, timeAgo } from '../../shared/format';
 import { SignInEmptyState } from '../../shared/sign-in-empty-state';
+import { VideoThumbnail } from '../../shared/video-thumbnail';
 import { VideoCard } from '../../shared/video-card';
 
 /**
@@ -96,6 +98,92 @@ export class Liked implements OnInit {
       next: (list) => {
         this.videos.set(list);
         this.loaded.set(true);
+      },
+      error: () => this.loaded.set(true),
+    });
+  }
+}
+
+@Component({
+  selector: 'app-my-videos',
+  imports: [SignInEmptyState, RouterLink, VideoThumbnail],
+  template: `
+    @if (auth.isLoggedIn()) {
+      <div class="pt-2">
+        <div class="mb-4 flex items-center justify-between px-2">
+          <h1 class="font-display text-3xl font-bold tracking-tight">Your videos</h1>
+          <a routerLink="/upload" class="btn-primary">Upload</a>
+        </div>
+
+        @if (videos().length) {
+          <div class="panel divide-y divide-[var(--glass-border)] overflow-hidden">
+            @for (v of videos(); track v.id) {
+              <a [routerLink]="['/watch', v.id]" class="flex items-center gap-4 p-3 transition hover:bg-fg/5">
+                <div class="w-36 shrink-0 sm:w-44">
+                  <app-video-thumbnail [videoId]="v.id" [title]="v.title" [imageUrl]="v.thumbnailUrl" [seconds]="v.durationSeconds" rounded="rounded-xl" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="line-clamp-2 font-semibold">{{ v.title }}</p>
+                  <p class="mt-0.5 text-xs text-muted">{{ v.category }} · uploaded {{ ago(v.publishedAtUtc) }}</p>
+                  @if (v.status === 'Ready') {
+                    <p class="mt-1 text-xs text-muted">{{ views(v.views) }} views · {{ v.qualities.join(' · ') }}</p>
+                  }
+                </div>
+                <span class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold" [class]="badgeClass(v.status)">
+                  {{ v.status === 'Processing' ? 'Processing ' + (v.processingProgress ?? 0) + '%' : v.status }}
+                </span>
+              </a>
+            }
+          </div>
+        } @else if (loaded()) {
+          <p class="px-2 text-muted">
+            You haven't uploaded anything yet. <a routerLink="/upload" class="font-semibold text-accent hover:underline">Upload your first video</a>
+          </p>
+        }
+      </div>
+    } @else {
+      <app-sign-in-empty-state icon="library" title="Share your videos" message="Sign in to upload videos and manage them here." />
+    }
+  `,
+})
+export class MyVideos implements OnInit, OnDestroy {
+  protected readonly auth = inject(AuthService);
+  private readonly videoService = inject(VideoService);
+
+  protected readonly videos = signal<Video[]>([]);
+  protected readonly loaded = signal(false);
+  protected readonly ago = timeAgo;
+  protected readonly views = compactNumber;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+
+  ngOnInit(): void {
+    if (this.auth.isLoggedIn()) this.refresh();
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.timer);
+  }
+
+  protected badgeClass(status: Video['status']): string {
+    switch (status) {
+      case 'Ready':
+        return 'bg-emerald-500/15 text-emerald-500';
+      case 'Failed':
+        return 'bg-red-500/15 text-red-500';
+      default:
+        return 'bg-accent/15 text-accent';
+    }
+  }
+
+  /** Refreshes every 4 s while something is still processing (SignalR replaces this next). */
+  private refresh(): void {
+    this.videoService.mine().subscribe({
+      next: (list) => {
+        this.videos.set(list);
+        this.loaded.set(true);
+        if (list.some((v) => v.status === 'Queued' || v.status === 'Processing')) {
+          this.timer = setTimeout(() => this.refresh(), 4000);
+        }
       },
       error: () => this.loaded.set(true),
     });

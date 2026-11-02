@@ -155,5 +155,126 @@ You saw it work: after the first read a `user:prefs:{id}` key appeared with a TT
 
 ### Known limits (to improve later)
 - **A brief flash of the wrong theme on a new device.** On first load there, the local copy shows "System" for a moment until the server value arrives.
-- **Likes are in memory.** They're lost on restart; the Video service gets a real database in Phase 2.
+- ~~Likes are in memory~~ — fixed in Step 4: likes now live in the Video database.
 - **The signing key is shared.** Every service has the same HMAC key. Production uses **asymmetric keys (RS256 + JWKS)**: only Auth can sign, and the others can only verify.
+
+---
+
+## Step 4 — Video upload, async processing and adaptive streaming
+
+```
+Browser ──multipart──► Gateway ──► Video service
+                                     1. save original  → D:\YTubeMedia\uploads\{id}\source.mp4
+                                     2. insert row      → status Queued
+                                     3. publish         → "video.uploaded"  ──► RabbitMQ
+                                     ◄── 200 { status: "Queued" } (immediately)
+                                                                   │
+                         Processing worker ◄── queue "processing.video-uploaded" (prefetch 1)
+                           ffprobe → ladder → ffmpeg ×N → master.m3u8 → thumbnail
+                           publishes "video.processing.progress / completed / failed"
+                                                                   │
+                         Video service ◄── queue "video.processing-events" → status Processing → Ready/Failed
+Watch page ──► GET /media/videos/{id}/hls/master.m3u8 ──► hls.js picks & switches renditions
+```
+
+### 4.1 Why processing is asynchronous
+Transcoding a 10-minute video into six qualities takes minutes of CPU. If the upload request waited for
+it, the browser would time out, a server restart would lose the work, and ten uploads at once would
+starve the API of threads. So the request does only the **fast, essential** part (store the file,
+record it, enqueue a job) and returns. The slow part happens in a **separate process** that can be
+scaled, restarted and retried independently. The user sees status `Queued → Processing x% → Ready`.
+
+### 4.2 Message broker concepts (RabbitMQ)
+| Concept | In YTube | Why |
+|---|---|---|
+| **Topic exchange** | `ytube.events` | Publishers send to an exchange with a *routing key*; they don't know who listens. |
+| **Routing key / binding** | `video.uploaded`, `video.processing.*` | Queues subscribe with patterns; `*` matches one word, so one queue gets progress + completed + failed. |
+| **Durable queue + persistent message** | all queues / messages | A broker restart doesn't lose jobs. |
+| **Publisher confirms** | `RabbitMqPublisher` | `PublishAsync` returns only after the broker has stored the message. |
+| **Manual ack** | `RabbitMqConsumerService` | The message leaves the queue only after the handler succeeds. If the worker crashes mid-encode, the job is redelivered. |
+| **Prefetch** | worker = 1, Video = 10 | Back-pressure: a worker holds one CPU-heavy job at a time. |
+| **Competing consumers** | run 2+ workers | Each job goes to exactly one of them — horizontal scaling with zero code changes. |
+| **Dead-letter queue (DLQ)** | `<queue>.dlq` | A message whose handler throws goes here instead of looping forever ("poison message"). |
+| **Requeue on shutdown** | `OperationCanceledException` → nack(requeue) | Stopping a worker mid-job isn't the job's fault, so it goes back for another worker. |
+
+**Delivery guarantee:** this is *at-least-once* delivery — a message can arrive twice (e.g. the worker
+finished but crashed before acking). So every handler is **idempotent**:
+- the worker deletes old HLS output before writing (`PrepareHlsDirectory`);
+- the Video service ignores a late "progress" for a video that's already Ready/Failed.
+
+**Business failure vs crash:** a corrupt file is an *expected* outcome — the worker publishes
+`VideoProcessingFailed` with a friendly reason and acks. Only unexpected exceptions reach the DLQ.
+
+### 4.3 The dual-write problem (and the outbox pattern)
+Upload does two writes to two systems: the **database** row and the **RabbitMQ** message. If the DB write
+succeeds and the publish fails, the video is stuck in "Queued" forever. Today we catch that and mark it
+Failed. The robust fix is the **transactional outbox**: save the message in an `Outbox` table *in the same
+DB transaction* as the row, and a background relay publishes it later — the two writes become one. That's
+a planned lesson.
+
+### 4.4 Storage design
+- **Files on disk, metadata in SQL.** Databases are bad at storing gigabytes; they store *paths*
+  (`videos/{id}/hls/master.m3u8`) relative to a media root. In production the root becomes **object
+  storage** (S3 / Azure Blob) — only `LocalMediaStorage` / `LocalMediaFiles` would change.
+- **Private vs public.** `uploads/` (originals) is never served; only `videos/` is exposed at `/media`.
+- **Atomic writes.** Files are written as `*.partial` and renamed when complete, so a half-written
+  upload never appears under its real name.
+- **Keep the original.** It lets us re-encode later (new codec, new resolution) without asking the user.
+- **Caching headers.** Segments never change → `Cache-Control: immutable, max-age=1 year`; playlists and
+  thumbnails get 60 s. A **CDN** in front of `/media` would serve almost all video traffic from the edge.
+
+### 4.5 Transcoding and the bitrate ladder
+- **Ladder:** 1080p 5 Mbps · 720p 2.8 Mbps · 480p 1.4 Mbps · 360p 800 kbps · 240p 400 kbps · 144p 200 kbps.
+- **No upscaling:** a 480p upload only gets 480/360/240/144 — upscaling adds bytes, not detail.
+- **Aspect ratio & rotation:** the "p" number is the *short side*, so portrait phone videos become
+  1080×1920, 720×1280… ffprobe's rotation flag is honoured.
+- **Capped bitrate** (`-b:v`, `-maxrate`, `-bufsize`): each rendition really fits the bandwidth the
+  master playlist advertises, so the player's choices are trustworthy.
+- **Aligned keyframes** (`-force_key_frames expr:gte(t,n_forced*4)`, `-sc_threshold 0`): every rendition
+  starts a new segment at exactly 0, 4, 8… seconds. **This is what makes mid-play switching seamless**:
+  segment N of 720p and segment N of 1080p cover the same moment, so the player can splice them.
+
+### 4.6 HLS and adaptive bitrate (ABR)
+- **Media playlist** (`720p/index.m3u8`): the list of 4-second `.ts` segments for one quality.
+- **Master playlist** (`master.m3u8`): the list of qualities with `BANDWIDTH` and `RESOLUTION`.
+- **Auto (ABR):** hls.js measures how fast segments download and how full the buffer is, then picks
+  the highest rendition that won't stall — moving up or down every few seconds.
+  `capLevelToPlayerSize` avoids fetching 1080p for a small player.
+- **Manual switch:** `hls.currentLevel = n` flushes the buffer and loads the new quality *from the
+  current position* (instant). `hls.nextLevel` would switch at the next segment (smoother, slower).
+- **Segment length trade-off:** shorter segments = faster switching and startup, but more files and
+  requests; 2–6 s is the usual range (we use 4 s).
+- **Safari** plays HLS natively, so hls.js isn't needed there.
+
+### 4.7 Database design for videos
+- **Tags in their own table** (`VideoTags(VideoId, Tag)` + index on `Tag`) — "all videos tagged
+  *angular*" is an index seek, not a scan of comma-separated strings. Tags are normalised
+  (lower-case, no `#`, de-duplicated) so `Angular`, `#angular` and `angular ` are one tag.
+- **Likes:** primary key `(VideoId, UserId)` makes a double like impossible even under a race.
+- **Indexes follow the queries:** `(Status, PublishedAtUtc)` for the public feed,
+  `(Status, Category, PublishedAtUtc)` for category tabs, `OwnerId` for "Your videos".
+- **N+1 avoided:** like counts for a page of 12 videos come from *one* grouped query, not 12.
+- **Paging in SQL** (`OFFSET/FETCH`), and `ExecuteUpdate` for status changes (one UPDATE, no SELECT).
+- **UTC everywhere:** `datetime2` has no time zone, so values are marked UTC when read
+  (`ConfigureConventions`) — otherwise browsers treat them as local time.
+
+### 4.8 Limits at every hop
+An upload passes Kestrel (gateway) → YARP → Kestrel (Video). Each has its own body-size limit (30 MB by
+default) and timeout, and *all* must allow 2 GB. Validation happens twice: in the browser (instant
+feedback) and in the BLL (the browser can't be trusted).
+
+**Self-check questions**
+1. Why does the upload endpoint return before the video is processed? What would break if it didn't?
+2. A worker crashes halfway through encoding. What happens to the job, and why is that safe?
+3. Why must keyframes be aligned across renditions for quality switching to work?
+4. Why store the original upload even after all renditions exist?
+5. What is the dual-write problem in the upload flow, and how does the outbox pattern fix it?
+6. Why is a corrupt file *not* sent to the dead-letter queue?
+7. Why are tags a separate table instead of a comma-separated column?
+
+### Known limits (to improve later)
+- **Progress is polled** (every 2.5–4 s). Next step: **SignalR** pushes progress the moment the worker reports it.
+- **One shared disk.** Worker and Video service both use `D:\YTubeMedia`; production uses object storage.
+- **No resumable uploads.** A dropped connection restarts the upload; large-file platforms use chunked/resumable uploads (e.g. tus).
+- **Very long videos** could exceed RabbitMQ's 30-minute delivery-ack timeout; real systems split work into per-rendition jobs.
+- **Unlisted ≠ private.** Media of a processing video is reachable if someone guesses its 11-character id.

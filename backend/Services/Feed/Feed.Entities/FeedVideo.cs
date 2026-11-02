@@ -15,4 +15,9 @@ public sealed record FeedVideo(
     int DurationSeconds,
     DateTime PublishedAtUtc,
     int LikeCount,
-    bool LikedByMe);
+    bool LikedByMe,
+    IReadOnlyList<string> Tags,
+    string? ThumbnailUrl,
+    string? StreamUrl,
+    IReadOnlyList<string> Qualities,
+    string Status);

@@ -1,17 +1,18 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { errorMessage } from '../../core/api/api.models';
 import { SignInPromptService } from '../../core/auth/sign-in-prompt.service';
-import { Video, VideoService } from '../../core/videos/video.service';
+import { Video, VideoService, mediaUrl } from '../../core/videos/video.service';
 import { ChannelAvatar } from '../../shared/channel-avatar';
 import { compactNumber, duration, timeAgo } from '../../shared/format';
 import { Icon } from '../../shared/icon';
+import { VideoPlayer } from '../../shared/video-player';
 import { VideoThumbnail } from '../../shared/video-thumbnail';
 
 /** Watch page: public to view; like / subscribe go through the sign-in gate. */
 @Component({
   selector: 'app-watch',
-  imports: [RouterLink, Icon, ChannelAvatar, VideoThumbnail],
+  imports: [RouterLink, Icon, ChannelAvatar, VideoThumbnail, VideoPlayer],
   template: `
     <div class="mx-auto flex max-w-[1600px] flex-col gap-6 pt-2 xl:flex-row">
       <section class="min-w-0 flex-1">
@@ -21,21 +22,44 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
             <a routerLink="/" class="btn-soft mt-4">Back to Discover</a>
           </div>
         } @else if (video(); as v) {
-          <!-- Player placeholder: real streaming arrives with uploads + processing -->
-          <div class="relative overflow-hidden rounded-3xl shadow-2xl shadow-accent/20">
-            <app-video-thumbnail [videoId]="v.id" [title]="v.title" rounded="rounded-3xl" />
-            <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/35 px-4 text-center text-white">
-              <span class="flex h-20 w-20 items-center justify-center rounded-full bg-white/90 text-neutral-900 shadow-xl">
-                <app-icon name="play" [size]="40" />
-              </span>
-              <span class="text-sm text-white/85">Playback arrives once videos can be uploaded</span>
+          @if (v.streamUrl) {
+            <app-video-player [src]="stream()!" [poster]="poster()" />
+          } @else if (v.status === 'Queued' || v.status === 'Processing') {
+            <!-- Still being transcoded: live progress (polled for now; SignalR pushes it in the next step) -->
+            <div class="relative overflow-hidden rounded-3xl bg-black">
+              <app-video-thumbnail [videoId]="v.id" [title]="v.title" [imageUrl]="v.thumbnailUrl" rounded="rounded-3xl" />
+              <div class="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60 px-6 text-center text-white backdrop-blur-sm">
+                <span class="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white"></span>
+                <div>
+                  <p class="font-display text-xl font-semibold">{{ v.status === 'Queued' ? 'Waiting for a processing worker…' : 'Processing your video…' }}</p>
+                  <p class="mt-1 text-sm text-white/75">Creating 1080p → 144p versions so it plays smoothly on any connection.</p>
+                </div>
+                <div class="w-full max-w-sm">
+                  <div class="h-2 overflow-hidden rounded-full bg-white/20">
+                    <div class="brand-gradient h-full rounded-full transition-all duration-700" [style.width.%]="v.processingProgress ?? 0"></div>
+                  </div>
+                  <p class="mt-2 text-sm font-semibold">{{ v.processingProgress ?? 0 }}%</p>
+                </div>
+              </div>
             </div>
-            <div class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/60 to-transparent px-5 pt-10 pb-4 text-xs text-white">
-              <span>0:00</span>
-              <span class="h-1 flex-1 overflow-hidden rounded-full bg-white/30"><span class="brand-gradient block h-full w-[8%]"></span></span>
-              <span>{{ length() }}</span>
+          } @else if (v.status === 'Failed') {
+            <div class="panel flex aspect-video flex-col items-center justify-center gap-3 px-6 text-center">
+              <p class="font-display text-xl font-semibold">This video couldn't be processed</p>
+              <p class="text-sm text-muted">{{ v.processingError || 'Something went wrong.' }}</p>
+              <a routerLink="/upload" class="btn-primary mt-2">Upload again</a>
             </div>
-          </div>
+          } @else {
+            <!-- Seeded sample videos have no media files -->
+            <div class="relative overflow-hidden rounded-3xl shadow-2xl shadow-accent/20">
+              <app-video-thumbnail [videoId]="v.id" [title]="v.title" rounded="rounded-3xl" />
+              <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/35 px-4 text-center text-white">
+                <span class="flex h-20 w-20 items-center justify-center rounded-full bg-white/90 text-neutral-900 shadow-xl">
+                  <app-icon name="play" [size]="40" />
+                </span>
+                <span class="text-sm text-white/85">Sample video — upload your own to see real playback</span>
+              </div>
+            </div>
+          }
 
           <div class="mt-5 flex flex-wrap items-start justify-between gap-4">
             <div class="min-w-0">
@@ -71,6 +95,13 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
             </div>
             <button (click)="subscribe()" class="btn-primary">Follow</button>
             <p class="w-full text-sm leading-relaxed whitespace-pre-line text-muted">{{ v.description }}</p>
+            @if (v.tags.length) {
+              <div class="flex w-full flex-wrap gap-1.5">
+                @for (tag of v.tags; track tag) {
+                  <span class="rounded-full bg-accent/12 px-2.5 py-1 text-xs font-medium text-accent">#{{ tag }}</span>
+                }
+              </div>
+            }
           </div>
         } @else {
           <div class="aspect-video animate-pulse rounded-3xl bg-surface-2"></div>
@@ -85,7 +116,7 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
           @for (n of upNext(); track n.id) {
             <a [routerLink]="['/watch', n.id]" class="group flex gap-3 rounded-2xl border border-transparent p-2 transition hover:border-[var(--glass-border)] hover:bg-fg/5">
               <div class="w-40 shrink-0">
-                <app-video-thumbnail [videoId]="n.id" [title]="n.title" [seconds]="n.durationSeconds" rounded="rounded-xl" />
+                <app-video-thumbnail [videoId]="n.id" [title]="n.title" [imageUrl]="n.thumbnailUrl" [seconds]="n.durationSeconds" rounded="rounded-xl" />
               </div>
               <div class="min-w-0 py-0.5">
                 <h3 class="line-clamp-2 text-sm leading-snug font-semibold transition group-hover:text-accent">{{ n.title }}</h3>
@@ -99,7 +130,7 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
     </div>
   `,
 })
-export class Watch {
+export class Watch implements OnDestroy {
   private readonly videos = inject(VideoService);
   private readonly gate = inject(SignInPromptService);
 
@@ -111,6 +142,10 @@ export class Watch {
   protected readonly error = signal<string | null>(null);
   protected readonly liking = signal(false);
   protected readonly copied = signal(false);
+
+  protected readonly stream = computed(() => mediaUrl(this.video()?.streamUrl));
+  protected readonly poster = computed(() => mediaUrl(this.video()?.thumbnailUrl));
+  private pollTimer: ReturnType<typeof setTimeout> | undefined;
 
   protected readonly likes = computed(() => compactNumber(this.video()?.likeCount ?? 0));
   protected readonly length = computed(() => duration(this.video()?.durationSeconds ?? 0));
@@ -168,18 +203,46 @@ export class Watch {
     });
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.pollTimer);
+  }
+
   private load(id: string): void {
+    clearTimeout(this.pollTimer);
     this.video.set(null);
     this.error.set(null);
     window.scrollTo({ top: 0 });
 
     this.videos.video(id).subscribe({
-      next: (v) => this.video.set(v),
+      next: (v) => {
+        this.video.set(v);
+        this.pollWhileProcessing(id);
+      },
       error: (err) => this.error.set(errorMessage(err)),
     });
     this.videos.feed(1, 16, null).subscribe({
       next: (page) => this.upNext.set(page.items.filter((v) => v.id !== id)),
       error: () => {},
     });
+  }
+
+  /**
+   * While the video is queued/processing, re-fetch it every 2.5 s to show progress.
+   * Temporary: the next step replaces this polling with SignalR pushing updates in real time.
+   */
+  private pollWhileProcessing(id: string): void {
+    const status = this.video()?.status;
+    if (status !== 'Queued' && status !== 'Processing') return;
+
+    this.pollTimer = setTimeout(() => {
+      this.videos.video(id).subscribe({
+        next: (v) => {
+          if (this.id() !== id) return;
+          this.video.set(v);
+          this.pollWhileProcessing(id);
+        },
+        error: () => this.pollWhileProcessing(id),
+      });
+    }, 2500);
   }
 }

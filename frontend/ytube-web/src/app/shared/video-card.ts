@@ -14,7 +14,7 @@ import { VideoThumbnail } from './video-thumbnail';
       [routerLink]="['/watch', v.id]"
       class="glass glass-interactive group block rounded-3xl p-2"
     >
-      <app-video-thumbnail [videoId]="v.id" [title]="v.title" [category]="v.category" [seconds]="v.durationSeconds" />
+      <app-video-thumbnail [videoId]="v.id" [title]="v.title" [imageUrl]="v.thumbnailUrl" [category]="v.category" [seconds]="v.durationSeconds" />
       <div class="flex gap-3 px-1 pt-3 pb-1">
         <app-channel-avatar [name]="v.channelName" [size]="34" />
         <div class="min-w-0">

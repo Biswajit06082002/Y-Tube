@@ -4,6 +4,10 @@ using YTube.Common.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Kestrel rejects bodies over 30 MB by default. Video uploads go through the gateway, so allow
+// up to ~2.1 GB here; the Video service enforces the real per-endpoint limit ([RequestSizeLimit]).
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 2_200L * 1024 * 1024);
+
 // Edge authentication: requests to protected routes without a valid JWT never reach a service.
 builder.Services.AddYTubeJwtAuthentication(builder.Configuration);
 builder.Services.AddHealthChecks();

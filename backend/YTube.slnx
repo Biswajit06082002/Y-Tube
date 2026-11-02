@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/BuildingBlocks/">
     <Project Path="BuildingBlocks/YTube.Common/YTube.Common.csproj" />
+    <Project Path="BuildingBlocks/YTube.Contracts/YTube.Contracts.csproj" />
   </Folder>
   <Folder Name="/Gateway/">
     <Project Path="Gateway/YTube.Gateway/YTube.Gateway.csproj" />
@@ -19,6 +20,9 @@
     <Project Path="Services/Feed/Feed.Entities/Feed.Entities.csproj" />
   </Folder>
   <Folder Name="/Services/Processing/">
+    <Project Path="Services/Processing/Processing.BLL/Processing.BLL.csproj" />
+    <Project Path="Services/Processing/Processing.DAL/Processing.DAL.csproj" />
+    <Project Path="Services/Processing/Processing.Entities/Processing.Entities.csproj" />
     <Project Path="Services/Processing/Processing.Worker/Processing.Worker.csproj" />
   </Folder>
   <Folder Name="/Services/User/">

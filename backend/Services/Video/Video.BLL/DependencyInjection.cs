@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddVideoBll(this IServiceCollection services)
     {
         services.AddScoped<IVideoService, VideoService>();
+        services.AddScoped<IVideoProcessingEventsHandler, VideoProcessingEventsHandler>();
         return services;
     }
 }

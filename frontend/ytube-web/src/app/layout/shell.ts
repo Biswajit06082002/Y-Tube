@@ -200,6 +200,7 @@ export class Shell {
     { label: 'Following', icon: 'subscriptions', link: '/feed/subscriptions' },
     { label: 'History', icon: 'history', link: '/feed/history' },
     { label: 'Liked', icon: 'like', link: '/feed/liked' },
+    { label: 'Your videos', icon: 'library', link: '/feed/uploads' },
   ];
 
   @HostListener('window:scroll')
@@ -227,11 +228,7 @@ export class Shell {
   }
 
   upload(): void {
-    this.prompt.prompt.set({
-      title: 'Uploads are coming soon',
-      message: 'Video uploads arrive with the Video service in Phase 2.',
-      infoOnly: true,
-    });
+    this.router.navigate(['/upload']);
   }
 
   signOut(): void {
