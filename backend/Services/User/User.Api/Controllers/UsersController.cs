@@ -11,17 +11,53 @@ namespace User.Api.Controllers;
 [ApiController]
 [Route("api/users")]
 [Authorize]
-public sealed class UsersController(IPreferencesService preferences) : ControllerBase
+public sealed class UsersController(IPreferencesService preferences, IProfileService profiles) : ControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
+    private Guid? CurrentUserId =>
+        Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var id) ? id : null;
 
+    private Guid UserId => CurrentUserId!.Value;
+    private string? Email => User.FindFirst(JwtRegisteredClaimNames.Email)?.Value;
+
+    // --- My profile ---
+
+    /// <summary>The signed-in user's profile (created on first call if it doesn't exist yet).</summary>
     [HttpGet("me")]
-    public IActionResult Me() =>
-        Ok(ApiResponse<object>.Ok(new
-        {
-            Id = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,
-            Email = User.FindFirst(JwtRegisteredClaimNames.Email)?.Value
-        }));
+    public async Task<IActionResult> Me(CancellationToken ct) =>
+        Ok(ApiResponse<ProfileDto>.Ok(await profiles.GetOrCreateMeAsync(UserId, Email, ct)));
+
+    [HttpPut("me/profile")]
+    public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request, CancellationToken ct) =>
+        (await profiles.UpdateMeAsync(UserId, Email, request, ct)).ToActionResult("Profile saved.");
+
+    [HttpGet("me/following")]
+    public async Task<IActionResult> Following(CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<ProfileDto>>.Ok(await profiles.GetFollowingAsync(UserId, ct)));
+
+    /// <summary>Just the ids — used by the Feed service to build the Following feed.</summary>
+    [HttpGet("me/following/ids")]
+    public async Task<IActionResult> FollowingIds(CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<Guid>>.Ok(await profiles.GetFollowingIdsAsync(UserId, ct)));
+
+    // --- Anyone's channel ---
+
+    /// <summary>Public channel profile. Optional auth: with a token, IsFollowedByMe/IsMe are filled in.</summary>
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/profile")]
+    public async Task<IActionResult> Profile(Guid id, CancellationToken ct) =>
+        await profiles.GetAsync(id, CurrentUserId, ct) is { } profile
+            ? Ok(ApiResponse<ProfileDto>.Ok(profile))
+            : NotFound(ApiResponse<ProfileDto>.Fail("channel_not_found", "This channel doesn't exist."));
+
+    [HttpPut("{id:guid}/follow")]
+    public async Task<IActionResult> Follow(Guid id, CancellationToken ct) =>
+        (await profiles.SetFollowAsync(UserId, id, follow: true, ct)).ToActionResult();
+
+    [HttpDelete("{id:guid}/follow")]
+    public async Task<IActionResult> Unfollow(Guid id, CancellationToken ct) =>
+        (await profiles.SetFollowAsync(UserId, id, follow: false, ct)).ToActionResult();
+
+    // --- Preferences ---
 
     [HttpGet("me/preferences")]
     public async Task<IActionResult> GetPreferences(CancellationToken ct) =>

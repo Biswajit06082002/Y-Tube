@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.Configure<MediaStorageOptions>(configuration.GetSection(MediaStorageOptions.SectionName));
         services.AddSingleton<IMediaStorage, LocalMediaStorage>();
+        services.AddSingleton<IViewCounterStore, RedisViewCounterStore>();
         return services;
     }
 }

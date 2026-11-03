@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../core/auth/auth.service';
 import { SignInPromptService } from '../core/auth/sign-in-prompt.service';
+import { ProfileService } from '../core/users/profile.service';
 import { ChannelAvatar } from '../shared/channel-avatar';
 import { Icon, IconName } from '../shared/icon';
 import { Logo } from '../shared/logo';
@@ -128,19 +129,25 @@ interface NavItem {
             </button>
             <div class="relative">
               <button (click)="openMenu('account')" class="flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-fg/8" aria-label="Account menu">
-                <app-channel-avatar [name]="user.email" [size]="32" />
+                <app-channel-avatar [name]="profiles.me()?.displayName ?? user.email" [size]="32" />
               </button>
               @if (menu() === 'account') {
                 <div class="fixed inset-0 z-40" (click)="menu.set(null)"></div>
                 <div class="glass-strong absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-3xl p-2">
                   <div class="flex items-center gap-3 p-3">
-                    <app-channel-avatar [name]="user.email" [size]="40" />
+                    <app-channel-avatar [name]="profiles.me()?.displayName ?? user.email" [size]="40" />
                     <div class="min-w-0">
-                      <p class="truncate text-sm font-semibold">{{ user.email }}</p>
-                      <p class="text-xs text-muted">Signed in</p>
+                      <p class="truncate text-sm font-semibold">{{ profiles.me()?.displayName ?? user.email }}</p>
+                      <p class="truncate text-xs text-muted">{{ profiles.me() ? '@' + profiles.me()!.handle : user.email }}</p>
                     </div>
                   </div>
                   <hr class="my-1 border-line" />
+                  <a [routerLink]="['/channel', user.id]" (click)="menu.set(null)" class="nav-item w-full">
+                    <app-icon name="account" [size]="20" /> Your channel
+                  </a>
+                  <a routerLink="/feed/uploads" (click)="menu.set(null)" class="nav-item w-full">
+                    <app-icon name="library" [size]="20" /> Your videos
+                  </a>
                   <button (click)="signOut()" class="nav-item w-full">
                     <app-icon name="logout" [size]="20" /> Sign out
                   </button>
@@ -186,6 +193,7 @@ interface NavItem {
 export class Shell {
   protected readonly auth = inject(AuthService);
   protected readonly prompt = inject(SignInPromptService);
+  protected readonly profiles = inject(ProfileService);
   protected readonly router = inject(Router);
 
   /** Desktop: wide or compact sidebar. Mobile: hidden drawer. */

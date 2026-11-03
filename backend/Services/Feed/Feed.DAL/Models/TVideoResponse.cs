@@ -10,6 +10,7 @@ public class TVideoResponse
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
+    public Guid? OwnerId { get; set; }
     public string ChannelId { get; set; } = string.Empty;
     public string ChannelName { get; set; } = string.Empty;
     public long Views { get; set; }

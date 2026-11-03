@@ -3,6 +3,11 @@ export function compactNumber(value: number): string {
   return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
+/** 1 → "1 view", 1234 → "1.2K views". */
+export function countLabel(value: number, singular: string, plural = `${singular}s`): string {
+  return `${compactNumber(value)} ${value === 1 ? singular : plural}`;
+}
+
 /** Seconds → "4:05" or "1:02:09". */
 export function duration(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);

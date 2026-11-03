@@ -4,6 +4,7 @@ using Auth.DAL.Context;
 using Microsoft.EntityFrameworkCore;
 using YTube.Common.Auth;
 using YTube.Common.Caching;
+using YTube.Common.Messaging;
 using YTube.Common.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,7 @@ builder.Services.AddControllers();
 builder.Services.AddServiceDefaults();
 builder.Services.AddYTubeJwtAuthentication(builder.Configuration);
 builder.Services.AddYTubeRedis(builder.Configuration);
+builder.Services.AddYTubeRabbitMq(builder.Configuration);
 builder.Services.AddAuthBll(builder.Configuration);
 builder.Services.AddAuthDal(builder.Configuration);
 

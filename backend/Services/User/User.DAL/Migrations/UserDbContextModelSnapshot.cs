@@ -22,6 +22,24 @@ namespace User.DAL.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("User.DAL.Models.TFollow", b =>
+                {
+                    b.Property<Guid>("FollowerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FolloweeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("FollowerId", "FolloweeId");
+
+                    b.HasIndex("FolloweeId");
+
+                    b.ToTable("Follows", (string)null);
+                });
+
             modelBuilder.Entity("User.DAL.Models.TUserPreferences", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -39,6 +57,39 @@ namespace User.DAL.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("UserPreferences", (string)null);
+                });
+
+            modelBuilder.Entity("User.DAL.Models.TUserProfile", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Bio")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Handle")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("JoinedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("Handle")
+                        .IsUnique();
+
+                    b.ToTable("UserProfiles", (string)null);
                 });
 #pragma warning restore 612, 618
         }

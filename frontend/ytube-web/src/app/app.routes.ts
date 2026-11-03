@@ -14,6 +14,7 @@ export const routes: Routes = [
     children: [
       { path: '', loadComponent: () => import('./features/home/home').then((m) => m.Home) },
       { path: 'watch/:id', loadComponent: () => import('./features/watch/watch').then((m) => m.Watch) },
+      { path: 'channel/:id', loadComponent: () => import('./features/channel/channel').then((m) => m.Channel) },
       { path: 'feed/subscriptions', loadComponent: () => import('./features/library/library-pages').then((m) => m.Subscriptions) },
       { path: 'feed/history', loadComponent: () => import('./features/library/library-pages').then((m) => m.History) },
       { path: 'feed/liked', loadComponent: () => import('./features/library/library-pages').then((m) => m.Liked) },

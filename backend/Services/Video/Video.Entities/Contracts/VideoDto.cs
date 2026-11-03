@@ -7,6 +7,7 @@ public sealed record VideoDto(
     string Description,
     string Category,
     IReadOnlyList<string> Tags,
+    Guid? OwnerId,
     string ChannelId,
     string ChannelName,
     long Views,

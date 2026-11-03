@@ -9,6 +9,7 @@ public sealed record FeedVideo(
     string Title,
     string Description,
     string Category,
+    Guid? OwnerId,
     string ChannelId,
     string ChannelName,
     long Views,

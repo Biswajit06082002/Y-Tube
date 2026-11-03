@@ -51,6 +51,22 @@ public sealed class VideoService(
     public async Task<IReadOnlyList<VideoDto>> ListMineAsync(Guid ownerId, CancellationToken ct = default) =>
         await ToDtosAsync(await repository.ListByOwnerAsync(ownerId, ct), ownerId.ToString(), ct);
 
+    public async Task<PagedResult<VideoDto>> ListByChannelAsync(Guid ownerId, int page, int pageSize, string? userId, CancellationToken ct = default) =>
+        await ListByOwnersAsync([ownerId], page, pageSize, userId, ct);
+
+    public Task<ChannelStatsDto> ChannelStatsAsync(Guid ownerId, CancellationToken ct = default) =>
+        repository.GetChannelStatsAsync(ownerId, ct);
+
+    public async Task<PagedResult<VideoDto>> ListByOwnersAsync(IReadOnlyCollection<Guid> ownerIds, int page, int pageSize, string? userId, CancellationToken ct = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        if (ownerIds.Count == 0) return PagedResult<VideoDto>.Empty(page, pageSize);
+
+        var (items, total) = await repository.ListReadyByOwnersAsync(ownerIds, (page - 1) * pageSize, pageSize, ct);
+        return new PagedResult<VideoDto>(await ToDtosAsync(items, userId, ct), page, pageSize, total);
+    }
+
     public async Task<VideoDto?> SetLikeAsync(string id, string userId, bool liked, CancellationToken ct = default)
     {
         var video = await repository.GetByIdAsync(id, ct);
@@ -74,7 +90,7 @@ public sealed class VideoService(
             Category = command.Category,
             Tags = tags,
             ChannelId = $"ch_{command.OwnerId:N}"[..15],
-            ChannelName = command.OwnerName,
+            ChannelName = await repository.GetLatestChannelNameAsync(command.OwnerId, ct) ?? command.OwnerName,
             Status = VideoStatus.Queued,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -164,7 +180,7 @@ public sealed class VideoService(
         var likedByMe = userId is null ? new HashSet<string>() : await repository.GetLikedAmongAsync(userId, ids, ct);
 
         return [.. videos.Select(v => new VideoDto(
-            v.Id, v.Title, v.Description, v.Category, v.Tags, v.ChannelId, v.ChannelName, v.Views, v.DurationSeconds,
+            v.Id, v.Title, v.Description, v.Category, v.Tags, v.OwnerId, v.ChannelId, v.ChannelName, v.Views, v.DurationSeconds,
             v.PublishedAtUtc ?? v.CreatedAtUtc,
             v.BaseLikes + likeCounts.GetValueOrDefault(v.Id),
             likedByMe.Contains(v.Id),

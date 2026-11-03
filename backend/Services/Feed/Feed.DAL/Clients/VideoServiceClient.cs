@@ -27,6 +27,16 @@ public sealed class VideoServiceClient(HttpClient http) : IVideoCatalogClient
         return new PagedResult<FeedVideo>([.. data.Items.Select(v => v.ToEntity())], data.Page, data.PageSize, data.TotalCount);
     }
 
+    public async Task<PagedResult<FeedVideo>> GetVideosByOwnersAsync(IReadOnlyCollection<Guid> ownerIds, int page, int pageSize, CancellationToken ct = default)
+    {
+        var url = $"api/videos/by-owners?ownerIds={string.Join(',', ownerIds)}&page={page}&pageSize={pageSize}";
+        var response = await http.GetFromJsonAsync<ApiResponse<PagedResult<TVideoResponse>>>(url, ct);
+        if (response?.Data is not { } data)
+            return PagedResult<FeedVideo>.Empty(page, pageSize);
+
+        return new PagedResult<FeedVideo>([.. data.Items.Select(v => v.ToEntity())], data.Page, data.PageSize, data.TotalCount);
+    }
+
     public async Task<IReadOnlyList<string>> GetCategoriesAsync(CancellationToken ct = default)
     {
         var response = await http.GetFromJsonAsync<ApiResponse<IReadOnlyList<string>>>("api/videos/categories", ct);

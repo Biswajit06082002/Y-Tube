@@ -1,4 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Video.Api.Models;
@@ -75,6 +77,49 @@ public sealed class VideosController(IVideoService videos) : ControllerBase
             Thumbnail: form.Thumbnail is null ? null : new UploadedFile(thumbnailStream!, form.Thumbnail.FileName, form.Thumbnail.Length));
 
         return (await videos.UploadAsync(command, ct)).ToActionResult("Upload complete — your video is being processed.");
+    }
+
+    // --- Channels ---
+
+    [HttpGet("channel/{ownerId:guid}")]
+    public async Task<IActionResult> Channel(Guid ownerId, int page = 1, int pageSize = 12, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<VideoDto>>.Ok(await videos.ListByChannelAsync(ownerId, page, pageSize, UserId, ct)));
+
+    [HttpGet("channel/{ownerId:guid}/stats")]
+    public async Task<IActionResult> ChannelStats(Guid ownerId, CancellationToken ct) =>
+        Ok(ApiResponse<ChannelStatsDto>.Ok(await videos.ChannelStatsAsync(ownerId, ct)));
+
+    /// <summary>Public videos of several creators — the Feed service uses this for the Following feed.</summary>
+    [HttpGet("by-owners")]
+    public async Task<IActionResult> ByOwners([FromQuery] string ownerIds = "", int page = 1, int pageSize = 12, CancellationToken ct = default)
+    {
+        var ids = ownerIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => Guid.TryParse(s, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .Distinct()
+            .Take(500)
+            .ToList();
+        return Ok(ApiResponse<PagedResult<VideoDto>>.Ok(await videos.ListByOwnersAsync(ids, page, pageSize, UserId, ct)));
+    }
+
+    // --- Views ---
+
+    /// <summary>
+    /// Reported by the player after a few seconds of real playback. Anonymous viewers count too;
+    /// they're identified by a hash of IP + browser so the same person isn't counted twice.
+    /// </summary>
+    [HttpPost("{id}/views")]
+    public async Task<IActionResult> RecordView(string id, [FromServices] IViewService views, CancellationToken ct)
+    {
+        var viewer = UserId is { } uid ? $"u:{uid}" : $"a:{AnonymousViewerHash()}";
+        return (await views.RecordViewAsync(id, viewer, ct)).ToActionResult();
+    }
+
+    private string AnonymousViewerHash()
+    {
+        // RemoteIpAddress is the real client thanks to UseForwardedHeaders (the gateway adds X-Forwarded-For).
+        var raw = $"{HttpContext.Connection.RemoteIpAddress}|{Request.Headers.UserAgent}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)))[..16];
     }
 
     [Authorize]

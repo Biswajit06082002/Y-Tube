@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using Feed.BLL.Interfaces;
 using Feed.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -26,9 +25,6 @@ public sealed class FeedController(IFeedService feed) : ControllerBase
     /// <summary>Videos from followed creators. Needs a login.</summary>
     [Authorize]
     [HttpGet("subscriptions")]
-    public async Task<IActionResult> Subscriptions(int page = 1, int pageSize = 12, CancellationToken ct = default)
-    {
-        var userId = Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
-        return Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(await feed.SubscriptionsAsync(userId, page, pageSize, ct)));
-    }
+    public async Task<IActionResult> Subscriptions(int page = 1, int pageSize = 12, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<FeedVideo>>.Ok(await feed.SubscriptionsAsync(page, pageSize, ct)));
 }

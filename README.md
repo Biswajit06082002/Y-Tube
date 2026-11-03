@@ -26,10 +26,12 @@ Media on disk (outside the repo): D:\YTubeMedia\uploads (originals, private), D:
 | Path via gateway              | Service | Login required |
 |-------------------------------|---------|----------------|
 | `/api/auth/**`                | Auth    | no (rate limited: 10/min per IP) |
-| `/api/users/**`               | User    | yes |
+| `GET /api/users/{id}/profile` (channel profile) | User | no |
+| `/api/users/**` (me, edit profile, follow, following, preferences) | User | yes |
 | `GET /api/videos/**`          | Video   | no — anyone can browse/watch |
 | `/api/videos/liked`, `/api/videos/mine`, any non-GET on `/api/videos/**` (upload, like, unlike) | Video | yes |
 | `GET /media/**` (HLS playlists, segments, thumbnails) | Video | no |
+| `POST /api/videos/{id}/views` (counted after 5 s of playback, deduplicated per viewer) | Video | no |
 | `GET /api/feed/**`            | Feed    | no — home feed is public |
 | `/api/feed/subscriptions`     | Feed    | yes |
 
@@ -140,6 +142,16 @@ dotnet ef migrations add <Name> --project Services/Auth/Auth.DAL --startup-proje
    Progress, completion and failure go back as `video.processing.*` events.
 3. Video service consumes those events → status **Processing → Ready / Failed**; only Ready videos are public.
 4. The watch page plays `master.m3u8` with **hls.js**: **Auto** (adaptive bitrate) or a fixed quality, switchable mid-play.
+
+## Channels, follows and views
+
+- **Channel page** `/channel/{userId}`: profile (name, @handle, bio, joined, followers) from the User service +
+  videos and totals (videos, views, likes) from the Video service. Owners can edit their profile there.
+- **Profiles** are created from Auth's `user.registered` event (or lazily on first `GET /api/users/me`).
+  Renames publish `user.profile.updated`, and the Video service updates the creator name on their videos.
+- **Follow** `PUT|DELETE /api/users/{id}/follow`; the **Following** page lists followed creators and their newest
+  videos (Feed service: User → Video, fan-out on read).
+- **Views**: Redis dedup (30 min per viewer) → Redis buffer → batched `Views = Views + n` to SQL every 10 s.
 
 ## System design concepts — roadmap
 

@@ -12,6 +12,26 @@ public interface IPreferencesService
     Task<Result<PreferencesDto>> UpdateAsync(Guid userId, UpdatePreferencesRequest request, CancellationToken ct = default);
 }
 
+public interface IProfileService
+{
+    /// <summary>Public profile, personalised for the viewer. Null if the user has no profile.</summary>
+    Task<ProfileDto?> GetAsync(Guid userId, Guid? viewerId, CancellationToken ct = default);
+
+    /// <summary>The signed-in user's profile, created on the spot if it doesn't exist yet.</summary>
+    Task<ProfileDto> GetOrCreateMeAsync(Guid userId, string? email, CancellationToken ct = default);
+
+    Task<Result<ProfileDto>> UpdateMeAsync(Guid userId, string? email, UpdateProfileRequest request, CancellationToken ct = default);
+
+    /// <summary>Creates a default profile if missing (from the user.registered event, or lazily). Idempotent.</summary>
+    Task EnsureProfileAsync(Guid userId, string? email, DateTime? joinedAtUtc = null, CancellationToken ct = default);
+
+    /// <summary>Follow (true) or unfollow (false). Idempotent. Returns the followee's updated profile.</summary>
+    Task<Result<ProfileDto>> SetFollowAsync(Guid followerId, Guid followeeId, bool follow, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ProfileDto>> GetFollowingAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetFollowingIdsAsync(Guid userId, CancellationToken ct = default);
+}
+
 // --- Implemented in the DAL (database access) ---
 
 public interface IPreferencesRepository
@@ -20,4 +40,26 @@ public interface IPreferencesRepository
 
     /// <summary>Insert on first save, update afterwards.</summary>
     Task UpsertAsync(Guid userId, string theme, CancellationToken ct = default);
+}
+
+public interface IProfileRepository
+{
+    Task<UserProfile?> GetAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<UserProfile>> GetManyAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+    Task<bool> HandleTakenAsync(string handle, Guid exceptUserId, CancellationToken ct = default);
+
+    /// <summary>False when the row (or its handle) already exists — e.g. two requests created it at once.</summary>
+    Task<bool> TryAddAsync(UserProfile profile, CancellationToken ct = default);
+
+    /// <summary>False when the new handle was taken in the meantime (unique index).</summary>
+    Task<bool> TryUpdateAsync(UserProfile profile, CancellationToken ct = default);
+}
+
+public interface IFollowRepository
+{
+    Task SetFollowAsync(Guid followerId, Guid followeeId, bool follow, CancellationToken ct = default);
+    Task<bool> IsFollowingAsync(Guid followerId, Guid followeeId, CancellationToken ct = default);
+    Task<int> CountFollowersAsync(Guid userId, CancellationToken ct = default);
+    Task<int> CountFollowingAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetFolloweeIdsAsync(Guid followerId, CancellationToken ct = default);
 }

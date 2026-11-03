@@ -4,6 +4,7 @@ using Video.DAL.Context;
 using Video.DAL.Mappings;
 using Video.DAL.Models;
 using Video.Entities;
+using Video.Entities.Contracts;
 
 namespace Video.DAL.Repositories;
 
@@ -37,6 +38,53 @@ public sealed class VideoRepository(VideoDbContext db) : IVideoRepository
                 .AsSplitQuery()
                 .ToListAsync(ct))
             .Select(r => r.ToEntity())];
+
+    public async Task<(IReadOnlyList<VideoItem> Items, int Total)> ListReadyByOwnersAsync(
+        IReadOnlyCollection<Guid> ownerIds, int skip, int take, CancellationToken ct = default)
+    {
+        var query = db.Videos.AsNoTracking()
+            .Where(v => v.Status == ReadyStatus && v.OwnerId != null && ownerIds.Contains(v.OwnerId.Value));
+
+        var total = await query.CountAsync(ct);
+        var rows = await query
+            .OrderByDescending(v => v.PublishedAtUtc).ThenBy(v => v.Id)
+            .Skip(skip).Take(take)
+            .Include(v => v.Tags)
+            .AsSplitQuery()
+            .ToListAsync(ct);
+
+        return ([.. rows.Select(r => r.ToEntity())], total);
+    }
+
+    public async Task<ChannelStatsDto> GetChannelStatsAsync(Guid ownerId, CancellationToken ct = default)
+    {
+        var ready = db.Videos.AsNoTracking().Where(v => v.OwnerId == ownerId && v.Status == ReadyStatus);
+
+        var totals = await ready
+            .GroupBy(_ => 1)
+            .Select(g => new { Count = g.Count(), Views = g.Sum(v => v.Views), BaseLikes = g.Sum(v => (long)v.BaseLikes) })
+            .FirstOrDefaultAsync(ct);
+        var likes = await db.VideoLikes.AsNoTracking().CountAsync(l => ready.Any(v => v.Id == l.VideoId), ct);
+
+        return new ChannelStatsDto(totals?.Count ?? 0, totals?.Views ?? 0, (totals?.BaseLikes ?? 0) + likes);
+    }
+
+    public Task<string?> GetLatestChannelNameAsync(Guid ownerId, CancellationToken ct = default) =>
+        db.Videos.AsNoTracking()
+            .Where(v => v.OwnerId == ownerId)
+            .OrderByDescending(v => v.CreatedAtUtc)
+            .Select(v => v.ChannelName)
+            .FirstOrDefaultAsync(ct);
+
+    public Task UpdateChannelNameAsync(Guid ownerId, string channelName, CancellationToken ct = default) =>
+        db.Videos.Where(v => v.OwnerId == ownerId).ExecuteUpdateAsync(s => s.SetProperty(v => v.ChannelName, channelName), ct);
+
+    public async Task AddViewsAsync(IReadOnlyDictionary<string, long> viewsByVideo, CancellationToken ct = default)
+    {
+        // Relative increments (Views = Views + n), never "read, add, write": two writers can't overwrite each other.
+        foreach (var (videoId, views) in viewsByVideo)
+            await db.Videos.Where(v => v.Id == videoId).ExecuteUpdateAsync(s => s.SetProperty(v => v.Views, v => v.Views + views), ct);
+    }
 
     public async Task<IReadOnlyList<VideoItem>> GetByIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default) =>
         [.. (await db.Videos.AsNoTracking()

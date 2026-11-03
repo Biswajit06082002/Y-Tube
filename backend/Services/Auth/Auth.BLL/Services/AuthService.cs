@@ -5,7 +5,9 @@ using Auth.Entities;
 using Auth.Entities.Contracts;
 using Microsoft.Extensions.Logging;
 using YTube.Common.Caching;
+using YTube.Common.Messaging;
 using YTube.Common.Results;
+using YTube.Contracts.Events;
 
 namespace Auth.BLL.Services;
 
@@ -16,6 +18,7 @@ public sealed class AuthService(
     ITokenService tokenService,
     IEmailSender emailSender,
     ICacheService cache,
+    IMessagePublisher publisher,
     ILogger<AuthService> logger) : IAuthService
 {
     private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
@@ -88,6 +91,7 @@ public sealed class AuthService(
         await cache.RemoveAsync(key, ct);
 
         logger.LogInformation("User {UserId} signed up", user.Id);
+        await PublishUserRegisteredAsync(user, ct);
         return tokens;
     }
 
@@ -186,6 +190,23 @@ public sealed class AuthService(
         }, ct);
 
         return new AuthTokensResponse(accessToken, accessExpires, rawRefresh, refreshExpires, new UserSummary(user.Id, user.Email));
+    }
+
+    /// <summary>
+    /// Tells other services a user exists (the User service creates the profile). Not critical:
+    /// if the broker is down the sign-up still succeeds, and the User service creates the profile
+    /// lazily the first time it's needed.
+    /// </summary>
+    private async Task PublishUserRegisteredAsync(User user, CancellationToken ct)
+    {
+        try
+        {
+            await publisher.PublishAsync(UserRoutingKeys.UserRegistered, new UserRegistered(user.Id, user.Email, user.CreatedAtUtc), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not publish UserRegistered for {UserId}", user.Id);
+        }
     }
 
     private Task SendOtpEmailAsync(string email, string otp, CancellationToken ct) =>

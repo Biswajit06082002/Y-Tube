@@ -20,11 +20,35 @@ public interface IVideoService
     Task<IReadOnlyList<VideoDto>> LikedByAsync(string userId, CancellationToken ct = default);
     Task<IReadOnlyList<VideoDto>> ListMineAsync(Guid ownerId, CancellationToken ct = default);
 
+    /// <summary>A channel page: one creator's public videos, newest first.</summary>
+    Task<PagedResult<VideoDto>> ListByChannelAsync(Guid ownerId, int page, int pageSize, string? userId, CancellationToken ct = default);
+    Task<ChannelStatsDto> ChannelStatsAsync(Guid ownerId, CancellationToken ct = default);
+
+    /// <summary>Public videos from several creators (the Following feed).</summary>
+    Task<PagedResult<VideoDto>> ListByOwnersAsync(IReadOnlyCollection<Guid> ownerIds, int page, int pageSize, string? userId, CancellationToken ct = default);
+
     /// <summary>Idempotent: liking twice is the same as liking once (safe to retry). Null when the video doesn't exist.</summary>
     Task<VideoDto?> SetLikeAsync(string id, string userId, bool liked, CancellationToken ct = default);
 
     /// <summary>Stores the original, saves the DB row and queues the processing job.</summary>
     Task<Result<VideoDto>> UploadAsync(UploadVideoCommand command, CancellationToken ct = default);
+}
+
+/// <summary>
+/// View counting: dedup per viewer in Redis, buffer increments in Redis, flush to SQL in batches.
+/// </summary>
+public interface IViewService
+{
+    Task<Result<ViewResultDto>> RecordViewAsync(string videoId, string viewerKey, CancellationToken ct = default);
+
+    /// <summary>Moves buffered view counts into the database. Called every few seconds by a background job.</summary>
+    Task<int> FlushPendingAsync(CancellationToken ct = default);
+}
+
+/// <summary>Keeps the denormalised channel name on videos in sync with the creator's profile.</summary>
+public interface IChannelSyncHandler
+{
+    Task HandleAsync(UserProfileUpdated e, CancellationToken ct = default);
 }
 
 /// <summary>Reacts to events published by the Processing worker.</summary>
@@ -41,6 +65,13 @@ public interface IVideoRepository
 {
     Task<(IReadOnlyList<VideoItem> Items, int Total)> ListReadyAsync(int skip, int take, string? category, CancellationToken ct = default);
     Task<IReadOnlyList<VideoItem>> ListByOwnerAsync(Guid ownerId, CancellationToken ct = default);
+    Task<(IReadOnlyList<VideoItem> Items, int Total)> ListReadyByOwnersAsync(IReadOnlyCollection<Guid> ownerIds, int skip, int take, CancellationToken ct = default);
+    Task<ChannelStatsDto> GetChannelStatsAsync(Guid ownerId, CancellationToken ct = default);
+    Task<string?> GetLatestChannelNameAsync(Guid ownerId, CancellationToken ct = default);
+    Task UpdateChannelNameAsync(Guid ownerId, string channelName, CancellationToken ct = default);
+
+    /// <summary>Adds a batch of buffered views: one UPDATE ... SET Views = Views + n per video.</summary>
+    Task AddViewsAsync(IReadOnlyDictionary<string, long> viewsByVideo, CancellationToken ct = default);
     Task<IReadOnlyList<VideoItem>> GetByIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default);
     Task<VideoItem?> GetByIdAsync(string id, CancellationToken ct = default);
 
@@ -54,6 +85,18 @@ public interface IVideoRepository
     Task<IReadOnlySet<string>> GetLikedAmongAsync(string userId, IReadOnlyCollection<string> videoIds, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetLikedVideoIdsAsync(string userId, CancellationToken ct = default);
     Task SetLikeAsync(string videoId, string userId, bool liked, CancellationToken ct = default);
+}
+
+/// <summary>Fast, approximate view bookkeeping in Redis (implemented in the DAL).</summary>
+public interface IViewCounterStore
+{
+    /// <summary>True only for the first view of this viewer within the window (atomic SET NX + TTL).</summary>
+    Task<bool> TryMarkViewedAsync(string videoId, string viewerKey, TimeSpan window, CancellationToken ct = default);
+
+    Task IncrementPendingAsync(string videoId, CancellationToken ct = default);
+
+    /// <summary>Atomically takes all buffered counts (new views go to a fresh buffer).</summary>
+    Task<IReadOnlyDictionary<string, long>> TakePendingAsync(CancellationToken ct = default);
 }
 
 /// <summary>Where media files live. Local disk today; object storage (S3 / Azure Blob) in production.</summary>

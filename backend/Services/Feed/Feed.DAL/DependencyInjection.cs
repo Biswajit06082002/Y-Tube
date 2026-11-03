@@ -19,6 +19,14 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(5); // never let a slow dependency hang our requests forever
             })
             .AddHttpMessageHandler<HeaderPropagationHandler>();
+
+        services.AddHttpClient<IUserFollowsClient, UserServiceClient>(client =>
+            {
+                client.BaseAddress = new Uri(configuration["Services:User"]
+                                             ?? throw new InvalidOperationException("Missing Services:User."));
+                client.Timeout = TimeSpan.FromSeconds(5);
+            })
+            .AddHttpMessageHandler<HeaderPropagationHandler>();
         return services;
     }
 }

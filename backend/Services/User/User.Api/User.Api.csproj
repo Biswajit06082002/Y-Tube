@@ -12,6 +12,7 @@
     <ProjectReference Include="..\User.DAL\User.DAL.csproj" />
     <ProjectReference Include="..\User.Entities\User.Entities.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Common\YTube.Common.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Contracts\YTube.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

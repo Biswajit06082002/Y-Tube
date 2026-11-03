@@ -1,11 +1,14 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
+using Video.Api.Background;
 using Video.Api.Messaging;
 using Video.BLL;
 using Video.DAL;
 using Video.DAL.Context;
 using YTube.Common.Auth;
+using YTube.Common.Caching;
 using YTube.Common.Messaging;
 using YTube.Common.Web;
 
@@ -16,9 +19,12 @@ builder.Services.AddControllers()
 builder.Services.AddServiceDefaults();
 builder.Services.AddYTubeJwtAuthentication(builder.Configuration);
 builder.Services.AddYTubeRabbitMq(builder.Configuration);
+builder.Services.AddYTubeRedis(builder.Configuration);
 builder.Services.AddVideoBll();
 builder.Services.AddVideoDal(builder.Configuration);
 builder.Services.AddHostedService<ProcessingEventsConsumer>();
+builder.Services.AddHostedService<UserEventsConsumer>();
+builder.Services.AddHostedService<ViewCountFlusher>();
 
 var app = builder.Build();
 
@@ -28,6 +34,9 @@ if (app.Environment.IsDevelopment())
     await VideoDbInitializer.InitializeAsync(scope.ServiceProvider.GetRequiredService<VideoDbContext>());
 }
 
+// Trust X-Forwarded-For from the gateway (loopback is a known proxy by default) so
+// RemoteIpAddress is the real client — used to tell anonymous viewers apart.
+app.UseForwardedHeaders(new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor });
 app.UseServiceDefaults();
 UseMediaFiles(app);
 app.UseAuthentication();

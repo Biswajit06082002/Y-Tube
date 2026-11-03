@@ -14,6 +14,8 @@ public static class DependencyInjection
         services.AddDbContext<UserDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("UserDb"), sql => sql.EnableRetryOnFailure()));
         services.AddScoped<IPreferencesRepository, PreferencesRepository>();
+        services.AddScoped<IProfileRepository, ProfileRepository>();
+        services.AddScoped<IFollowRepository, FollowRepository>();
         return services;
     }
 }

@@ -2,7 +2,9 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { Video, VideoService } from '../../core/videos/video.service';
-import { compactNumber, timeAgo } from '../../shared/format';
+import { countLabel, timeAgo } from '../../shared/format';
+import { Profile, ProfileService } from '../../core/users/profile.service';
+import { ChannelAvatar } from '../../shared/channel-avatar';
 import { SignInEmptyState } from '../../shared/sign-in-empty-state';
 import { VideoThumbnail } from '../../shared/video-thumbnail';
 import { VideoCard } from '../../shared/video-card';
@@ -14,16 +16,44 @@ import { VideoCard } from '../../shared/video-card';
 
 @Component({
   selector: 'app-subscriptions',
-  imports: [SignInEmptyState, RouterLink],
+  imports: [SignInEmptyState, RouterLink, VideoCard, ChannelAvatar],
   template: `
     @if (auth.isLoggedIn()) {
-      <div class="panel mx-auto mt-6 flex max-w-xl flex-col items-center px-6 py-16 text-center">
-        <h2 class="font-display text-2xl font-semibold">Not following anyone yet</h2>
-        <p class="mt-2 max-w-md text-muted">
-          New videos from creators you follow will show up here. Following arrives with the User service.
-        </p>
-        <a routerLink="/" class="btn-primary mt-6">Discover videos</a>
-      </div>
+      @if (creators().length) {
+        <div class="pt-2">
+          <h1 class="mb-4 px-2 font-display text-3xl font-bold tracking-tight">Following</h1>
+
+          <!-- Creators you follow -->
+          <div class="glass mb-6 flex gap-5 overflow-x-auto rounded-3xl p-4 [scrollbar-width:none]">
+            @for (c of creators(); track c.userId) {
+              <a [routerLink]="['/channel', c.userId]" class="group flex w-20 shrink-0 flex-col items-center gap-2 text-center">
+                <span class="rounded-[38%] transition group-hover:ring-2 group-hover:ring-accent/60">
+                  <app-channel-avatar [name]="c.displayName" [size]="56" />
+                </span>
+                <span class="w-full truncate text-xs font-medium">{{ c.displayName }}</span>
+              </a>
+            }
+          </div>
+
+          @if (videos().length) {
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              @for (v of videos(); track v.id) {
+                <app-video-card [video]="v" />
+              }
+            </div>
+          } @else if (loaded()) {
+            <p class="px-2 text-muted">The creators you follow haven't published anything yet.</p>
+          }
+        </div>
+      } @else if (loaded()) {
+        <div class="panel mx-auto mt-6 flex max-w-xl flex-col items-center px-6 py-16 text-center">
+          <h2 class="font-display text-2xl font-semibold">Not following anyone yet</h2>
+          <p class="mt-2 max-w-md text-muted">
+            Follow creators from their channel or a video page, and their new videos will show up here.
+          </p>
+          <a routerLink="/" class="btn-primary mt-6">Discover videos</a>
+        </div>
+      }
     } @else {
       <app-sign-in-empty-state
         icon="subscriptions"
@@ -33,8 +63,26 @@ import { VideoCard } from '../../shared/video-card';
     }
   `,
 })
-export class Subscriptions {
+export class Subscriptions implements OnInit {
   protected readonly auth = inject(AuthService);
+  private readonly profiles = inject(ProfileService);
+  private readonly videoService = inject(VideoService);
+
+  protected readonly creators = signal<Profile[]>([]);
+  protected readonly videos = signal<Video[]>([]);
+  protected readonly loaded = signal(false);
+
+  ngOnInit(): void {
+    if (!this.auth.isLoggedIn()) return;
+    this.profiles.following().subscribe({ next: (list) => this.creators.set(list), error: () => {} });
+    this.videoService.subscriptions().subscribe({
+      next: (page) => {
+        this.videos.set(page.items);
+        this.loaded.set(true);
+      },
+      error: () => this.loaded.set(true),
+    });
+  }
 }
 
 @Component({
@@ -126,7 +174,7 @@ export class Liked implements OnInit {
                   <p class="line-clamp-2 font-semibold">{{ v.title }}</p>
                   <p class="mt-0.5 text-xs text-muted">{{ v.category }} · uploaded {{ ago(v.publishedAtUtc) }}</p>
                   @if (v.status === 'Ready') {
-                    <p class="mt-1 text-xs text-muted">{{ views(v.views) }} views · {{ v.qualities.join(' · ') }}</p>
+                    <p class="mt-1 text-xs text-muted">{{ views(v.views, 'view') }} · {{ v.qualities.join(' · ') }}</p>
                   }
                 </div>
                 <span class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold" [class]="badgeClass(v.status)">
@@ -153,7 +201,7 @@ export class MyVideos implements OnInit, OnDestroy {
   protected readonly videos = signal<Video[]>([]);
   protected readonly loaded = signal(false);
   protected readonly ago = timeAgo;
-  protected readonly views = compactNumber;
+  protected readonly views = countLabel;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit(): void {

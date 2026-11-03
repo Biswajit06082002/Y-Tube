@@ -10,6 +10,8 @@ public static class DependencyInjection
     {
         services.AddScoped<IVideoService, VideoService>();
         services.AddScoped<IVideoProcessingEventsHandler, VideoProcessingEventsHandler>();
+        services.AddScoped<IViewService, ViewService>();
+        services.AddScoped<IChannelSyncHandler, ChannelSyncHandler>();
         return services;
     }
 }

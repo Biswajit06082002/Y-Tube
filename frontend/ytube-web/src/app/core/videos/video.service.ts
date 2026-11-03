@@ -12,6 +12,8 @@ export interface Video {
   description: string;
   category: string;
   tags: string[];
+  /** Creator's user id; null for seeded sample videos (no channel page). */
+  ownerId: string | null;
   channelId: string;
   channelName: string;
   views: number;
@@ -36,6 +38,12 @@ export interface PagedResult<T> {
   pageSize: number;
   totalCount: number;
   hasMore: boolean;
+}
+
+export interface ChannelStats {
+  videoCount: number;
+  totalViews: number;
+  totalLikes: number;
 }
 
 export interface UploadVideoInput {
@@ -73,6 +81,20 @@ export class VideoService {
 
   video(id: string): Observable<Video> {
     return unwrap(this.http.get<ApiResponse<Video>>(`${this.api}/api/videos/${id}`));
+  }
+
+  channelVideos(ownerId: string, page: number, pageSize: number): Observable<PagedResult<Video>> {
+    const params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    return unwrap(this.http.get<ApiResponse<PagedResult<Video>>>(`${this.api}/api/videos/channel/${ownerId}`, { params }));
+  }
+
+  channelStats(ownerId: string): Observable<ChannelStats> {
+    return unwrap(this.http.get<ApiResponse<ChannelStats>>(`${this.api}/api/videos/channel/${ownerId}/stats`));
+  }
+
+  /** Reports a qualified view (after a few seconds of playback). Works for guests too. */
+  recordView(id: string): Observable<{ counted: boolean }> {
+    return unwrap(this.http.post<ApiResponse<{ counted: boolean }>>(`${this.api}/api/videos/${id}/views`, null));
   }
 
   // --- Login required (the gateway returns 401 without a token) ---

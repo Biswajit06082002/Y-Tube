@@ -278,3 +278,81 @@ feedback) and in the BLL (the browser can't be trusted).
 - **No resumable uploads.** A dropped connection restarts the upload; large-file platforms use chunked/resumable uploads (e.g. tus).
 - **Very long videos** could exceed RabbitMQ's 30-minute delivery-ack timeout; real systems split work into per-rendition jobs.
 - **Unlisted ≠ private.** Media of a processing video is reachable if someone guesses its 11-character id.
+
+---
+
+## Step 5 — Channels, follows and view counting
+
+```
+Auth ── user.registered ──► User service: create profile (@handle)        ◄─ GET /api/users/me (lazy fallback)
+User ── user.profile.updated ──► Video service: rename the creator on all their videos
+
+Channel page = User (profile, followers) + Video (videos, totals)      — composed in the browser
+Following    = Feed → User "who do I follow?" → Video "their newest videos"   — fan-out on read
+Views        = player (5 s of playback) → POST /views → Redis dedup → Redis buffer → SQL every 10 s
+```
+
+### 5.1 Which service owns what
+- **User service:** profiles (`UserProfiles`, unique `Handle` index) and the follow graph (`Follows`, PK
+  `(FollowerId, FolloweeId)` + index on `FolloweeId`). "Who follows whom" is user data, not video data.
+- **Video service:** videos, likes, views and per-channel totals.
+- The link between them is only the **user id** (JWT `sub`) — no shared tables, no cross-database joins.
+
+### 5.2 Creating profiles: events + a lazy fallback
+Auth publishes **`user.registered`** after sign-up and the User service creates the profile. But events can be
+lost (broker down at that moment) and accounts created *before* this feature never had one. So `GET /me`
+also creates the profile if it's missing. Both paths call the same **idempotent** `EnsureProfileAsync`; if they
+race, the unique primary key lets only one insert win and the other simply reads it back.
+Lesson: **don't make correctness depend on one message arriving** — combine events with a safe fallback.
+
+### 5.3 Denormalisation and eventual consistency
+Every video stores a copy of its creator's name (`ChannelName`), so the feed renders 12 cards without asking the
+User service 12 times. The price: a rename has to be propagated. The User service publishes
+**`user.profile.updated`**; the Video service updates the name on all that creator's videos with one
+`UPDATE … WHERE OwnerId = @id`. For a moment old and new names coexist — the system is **eventually consistent**.
+That's the standard trade-off: fast reads in exchange for a short window of stale data.
+
+### 5.4 The Following feed: fan-out on read vs fan-out on write
+- **Fan-out on read (what we do):** at read time, get the ids you follow, then query videos `WHERE OwnerId IN (…)`.
+  Uploading costs nothing extra; every feed read does the work.
+- **Fan-out on write:** when a creator uploads, push the video id into each follower's pre-built feed list
+  (e.g. a Redis list per user). Reads become a single lookup, but a creator with 10 million followers means
+  10 million writes per upload.
+- Large platforms use a **hybrid**: fan-out on write for normal creators, fan-out on read for celebrities.
+
+### 5.5 Counting views at scale
+1. **What counts:** the player reports a view after **5 seconds of real playback** (seeking doesn't add time).
+2. **Dedup:** `SET video:viewed:{video}:{viewer} NX EX 1800` — atomic "only if it doesn't exist yet", expiring in
+   30 minutes. Signed-in viewers are identified by user id, guests by a hash of IP + browser. Refreshing the page
+   doesn't inflate the count.
+3. **Buffer:** a counted view is `HINCRBY video:views:pending {video} 1` in Redis — microseconds, no SQL lock.
+4. **Flush (write-behind / batching):** every 10 s a background job atomically `RENAME`s the buffer, so new views
+   go to a fresh one, and applies `UPDATE Videos SET Views = Views + n` per video.
+   - A viral video gets **one** SQL update per 10 s instead of one per viewer → no **hot-row contention**.
+   - Relative updates (`Views + n`) can't overwrite each other, unlike "read, add, write".
+5. **Trade-offs:** counts in SQL lag up to 10 s (the page shows +1 immediately), and a crash can lose up to 10 s of
+   views — fine for a view counter, never acceptable for payments.
+6. **Real client IP:** the gateway adds `X-Forwarded-For`; the Video service trusts it only from known proxies
+   (`UseForwardedHeaders`, loopback by default) — otherwise anyone could fake their IP.
+7. **Resilience in action:** after the laptop slept, Redis calls timed out once; the flusher logged a warning and
+   retried on the next tick. Nothing was lost because the buffer is only taken when Redis answers.
+
+### 5.6 Follow and like are idempotent
+`PUT /follow` twice = followed once (the primary key also blocks duplicates under a race); `DELETE` removes it.
+The UI updates **optimistically** (count changes instantly) and rolls back if the server refuses.
+
+**Self-check questions**
+1. Why does `GET /me` create a profile when the `user.registered` event already does?
+2. Why store the creator's name on every video, and what does that cost us?
+3. When would you switch the Following feed from fan-out on read to fan-out on write?
+4. Why buffer views in Redis instead of `UPDATE Videos SET Views = Views + 1` on every view?
+5. How does `SET … NX EX` stop a page refresh from counting twice, even with two requests at the same instant?
+6. Why must `X-Forwarded-For` only be trusted from known proxies?
+
+### Known limits (to improve later)
+- **N+1 on profiles:** follower/following counts are separate `COUNT` queries per profile; fine for small lists, a
+  counter column (updated with the follow) is the scalable version.
+- **Join date** for accounts that existed before profiles is the date the profile was created, not the sign-up date.
+- **View rules are client-side** (5 s of playback); a determined script can still call the endpoint once per
+  30 minutes per IP. Real platforms add bot detection on top.
+- **Sample channels** (seeded videos) have no account, so they have no channel page and can't be followed.

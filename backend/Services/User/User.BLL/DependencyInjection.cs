@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddUserBll(this IServiceCollection services)
     {
         services.AddScoped<IPreferencesService, PreferencesService>();
+        services.AddScoped<IProfileService, ProfileService>();
         return services;
     }
 }

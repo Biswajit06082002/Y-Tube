@@ -2,9 +2,10 @@ import { Component, OnDestroy, computed, effect, inject, input, signal, untracke
 import { RouterLink } from '@angular/router';
 import { errorMessage } from '../../core/api/api.models';
 import { SignInPromptService } from '../../core/auth/sign-in-prompt.service';
+import { Profile, ProfileService } from '../../core/users/profile.service';
 import { Video, VideoService, mediaUrl } from '../../core/videos/video.service';
 import { ChannelAvatar } from '../../shared/channel-avatar';
-import { compactNumber, duration, timeAgo } from '../../shared/format';
+import { compactNumber, countLabel, duration, timeAgo } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { VideoPlayer } from '../../shared/video-player';
 import { VideoThumbnail } from '../../shared/video-thumbnail';
@@ -23,7 +24,7 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
           </div>
         } @else if (video(); as v) {
           @if (v.streamUrl) {
-            <app-video-player [src]="stream()!" [poster]="poster()" />
+            <app-video-player [src]="stream()!" [poster]="poster()" (viewQualified)="countView()" />
           } @else if (v.status === 'Queued' || v.status === 'Processing') {
             <!-- Still being transcoded: live progress (polled for now; SignalR pushes it in the next step) -->
             <div class="relative overflow-hidden rounded-3xl bg-black">
@@ -86,14 +87,41 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
           </div>
 
           <div class="panel mt-5 flex flex-wrap items-center justify-between gap-4 p-4">
-            <div class="flex items-center gap-3">
-              <app-channel-avatar [name]="v.channelName" [size]="44" />
-              <div>
-                <p class="font-semibold">{{ v.channelName }}</p>
-                <p class="text-xs text-muted">Creator</p>
+            @if (v.ownerId) {
+              <a [routerLink]="['/channel', v.ownerId]" class="group/creator flex items-center gap-3">
+                <app-channel-avatar [name]="v.channelName" [size]="44" />
+                <div>
+                  <p class="font-semibold transition group-hover/creator:text-accent">{{ v.channelName }}</p>
+                  <p class="text-xs text-muted">
+                    @if (creator(); as c) {
+                      {{ format(c.followerCount) }} {{ c.followerCount === 1 ? 'follower' : 'followers' }}
+                    } @else {
+                      Creator
+                    }
+                  </p>
+                </div>
+              </a>
+              @if (v.isOwner) {
+                <a [routerLink]="['/channel', v.ownerId]" class="btn-soft">Your channel</a>
+              } @else {
+                <button (click)="toggleFollow()" [disabled]="followBusy()" [class]="creator()?.isFollowedByMe ? 'btn-soft' : 'btn-primary'">
+                  @if (creator()?.isFollowedByMe) {
+                    <app-icon name="check" [size]="18" /> Following
+                  } @else {
+                    Follow
+                  }
+                </button>
+              }
+            } @else {
+              <!-- Seeded sample videos have no real creator account -->
+              <div class="flex items-center gap-3">
+                <app-channel-avatar [name]="v.channelName" [size]="44" />
+                <div>
+                  <p class="font-semibold">{{ v.channelName }}</p>
+                  <p class="text-xs text-muted">Sample channel</p>
+                </div>
               </div>
-            </div>
-            <button (click)="subscribe()" class="btn-primary">Follow</button>
+            }
             <p class="w-full text-sm leading-relaxed whitespace-pre-line text-muted">{{ v.description }}</p>
             @if (v.tags.length) {
               <div class="flex w-full flex-wrap gap-1.5">
@@ -121,7 +149,7 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
               <div class="min-w-0 py-0.5">
                 <h3 class="line-clamp-2 text-sm leading-snug font-semibold transition group-hover:text-accent">{{ n.title }}</h3>
                 <p class="mt-1 text-xs text-muted">{{ n.channelName }}</p>
-                <p class="text-xs text-muted">{{ format(n.views) }} views · {{ ago(n.publishedAtUtc) }}</p>
+                <p class="text-xs text-muted">{{ label(n.views, 'view') }} · {{ ago(n.publishedAtUtc) }}</p>
               </div>
             </a>
           }
@@ -133,6 +161,7 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
 export class Watch implements OnDestroy {
   private readonly videos = inject(VideoService);
   private readonly gate = inject(SignInPromptService);
+  private readonly profiles = inject(ProfileService);
 
   /** :id route param. */
   readonly id = input.required<string>();
@@ -142,6 +171,8 @@ export class Watch implements OnDestroy {
   protected readonly error = signal<string | null>(null);
   protected readonly liking = signal(false);
   protected readonly copied = signal(false);
+  protected readonly creator = signal<Profile | null>(null);
+  protected readonly followBusy = signal(false);
 
   protected readonly stream = computed(() => mediaUrl(this.video()?.streamUrl));
   protected readonly poster = computed(() => mediaUrl(this.video()?.thumbnailUrl));
@@ -151,17 +182,26 @@ export class Watch implements OnDestroy {
   protected readonly length = computed(() => duration(this.video()?.durationSeconds ?? 0));
   protected readonly meta = computed(() => {
     const v = this.video();
-    return v ? `${compactNumber(v.views)} views · ${timeAgo(v.publishedAtUtc)}` : '';
+    return v ? `${countLabel(v.views, 'view')} · ${timeAgo(v.publishedAtUtc)}` : '';
   });
 
   protected readonly format = compactNumber;
   protected readonly ago = timeAgo;
+  protected readonly label = countLabel;
 
   constructor() {
     // Re-runs when navigating from one video to another (same component instance).
     effect(() => {
       const id = this.id();
       untracked(() => this.load(id));
+    });
+
+    // Signing in/out on this page changes "Following" and IsOwner — refresh the viewer-specific parts.
+    let first = true;
+    effect(() => {
+      this.profiles.myId();
+      if (first) return void (first = false);
+      untracked(() => this.refreshViewerState());
     });
   }
 
@@ -187,12 +227,44 @@ export class Watch implements OnDestroy {
     });
   }
 
-  subscribe(): void {
-    if (!this.gate.require({ title: 'Follow this creator?', message: 'Sign in to follow creators and see their new videos in Following.' })) return;
-    this.gate.prompt.set({
-      title: 'Following is coming soon',
-      message: 'Creators and following arrive with the User service in Phase 2.',
-      infoOnly: true,
+  toggleFollow(): void {
+    const c = this.creator();
+    if (!c) return;
+    if (!this.gate.require({ title: `Follow ${c.displayName}?`, message: 'Sign in to follow creators and see their new videos in Following.' })) return;
+
+    // Optimistic update, then take the server's follower count (or roll back).
+    const previous = c;
+    this.creator.set({ ...c, isFollowedByMe: !c.isFollowedByMe, followerCount: c.followerCount + (c.isFollowedByMe ? -1 : 1) });
+    this.followBusy.set(true);
+    this.profiles.setFollow(c.userId, !c.isFollowedByMe).subscribe({
+      next: (updated) => {
+        this.creator.set(updated);
+        this.followBusy.set(false);
+      },
+      error: () => {
+        this.creator.set(previous);
+        this.followBusy.set(false);
+      },
+    });
+  }
+
+  private refreshViewerState(): void {
+    const v = this.video();
+    if (!v) return;
+    this.videos.video(v.id).subscribe({ next: (fresh) => this.video.set(fresh), error: () => {} });
+    if (v.ownerId) this.profiles.profile(v.ownerId).subscribe({ next: (p) => this.creator.set(p), error: () => {} });
+  }
+
+  /** Called by the player after a few seconds of real playback. */
+  countView(): void {
+    const v = this.video();
+    if (!v) return;
+    this.videos.recordView(v.id).subscribe({
+      next: (res) => {
+        // The database is updated in batches every few seconds; show the +1 right away.
+        if (res.counted && this.video()?.id === v.id) this.video.update((cur) => (cur ? { ...cur, views: cur.views + 1 } : cur));
+      },
+      error: () => {},
     });
   }
 
@@ -210,6 +282,7 @@ export class Watch implements OnDestroy {
   private load(id: string): void {
     clearTimeout(this.pollTimer);
     this.video.set(null);
+    this.creator.set(null);
     this.error.set(null);
     window.scrollTo({ top: 0 });
 
@@ -217,6 +290,9 @@ export class Watch implements OnDestroy {
       next: (v) => {
         this.video.set(v);
         this.pollWhileProcessing(id);
+        if (v.ownerId) {
+          this.profiles.profile(v.ownerId).subscribe({ next: (p) => this.creator.set(p), error: () => {} });
+        }
       },
       error: (err) => this.error.set(errorMessage(err)),
     });

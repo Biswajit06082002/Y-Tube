@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, computed, effect, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, computed, effect, input, output, signal, untracked, viewChild } from '@angular/core';
 import Hls, { Level } from 'hls.js';
 import { Icon } from './icon';
 
@@ -33,6 +33,8 @@ interface QualityOption {
         playsinline
         [poster]="poster() ?? ''"
         (loadedmetadata)="ready.set(true)"
+        (timeupdate)="trackWatchTime()"
+        (seeking)="lastTime = null"
       ></video>
 
       @if (qualities().length > 1) {
@@ -71,6 +73,16 @@ export class VideoPlayer implements OnDestroy {
   readonly src = input.required<string>();
   readonly poster = input<string | null>(null);
 
+  /**
+   * Fires once per video after it has *actually played* for a few seconds (5 s, or half of a very
+   * short video). Seeking or a paused tab doesn't count — only continuous playback adds time.
+   */
+  readonly viewQualified = output<void>();
+
+  private watchedSeconds = 0;
+  protected lastTime: number | null = null;
+  private viewReported = false;
+
   private readonly videoRef = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private hls: Hls | null = null;
 
@@ -102,6 +114,24 @@ export class VideoPlayer implements OnDestroy {
     });
   }
 
+  protected trackWatchTime(): void {
+    const video = this.videoRef().nativeElement;
+    if (this.viewReported || video.paused) return;
+
+    const now = video.currentTime;
+    if (this.lastTime !== null) {
+      const delta = now - this.lastTime;
+      if (delta > 0 && delta < 1.5) this.watchedSeconds += delta; // ignore jumps (seeks)
+    }
+    this.lastTime = now;
+
+    const needed = Math.min(5, (video.duration || 10) / 2);
+    if (this.watchedSeconds >= needed) {
+      this.viewReported = true;
+      this.viewQualified.emit();
+    }
+  }
+
   select(level: number): void {
     this.menuOpen.set(false);
     this.selectedLevel.set(level);
@@ -118,6 +148,9 @@ export class VideoPlayer implements OnDestroy {
     this.hls = null;
     this.levels.set([]);
     this.selectedLevel.set(-1);
+    this.watchedSeconds = 0;
+    this.lastTime = null;
+    this.viewReported = false;
 
     if (Hls.isSupported()) {
       const hls = new Hls({ capLevelToPlayerSize: true }); // don't fetch 1080p for a small player
