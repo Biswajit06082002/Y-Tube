@@ -14,6 +14,21 @@ public sealed class ProfileRepository(UserDbContext db) : IProfileRepository
     public async Task<IReadOnlyList<UserProfile>> GetManyAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         [.. (await db.Profiles.AsNoTracking().Where(p => userIds.Contains(p.UserId)).ToListAsync(ct)).Select(p => p.ToEntity())];
 
+    public async Task<IReadOnlyList<UserProfile>> GetByHandlesAsync(IReadOnlyCollection<string> handles, CancellationToken ct = default) =>
+        [.. (await db.Profiles.AsNoTracking().Where(p => handles.Contains(p.Handle)).ToListAsync(ct)).Select(p => p.ToEntity())];
+
+    /// <summary>Prefix search (LIKE 'abc%') can use the unique Handle index; a '%abc%' search could not.</summary>
+    public async Task<IReadOnlyList<UserProfile>> SearchAsync(string prefix, int take, CancellationToken ct = default)
+    {
+        var handlePrefix = prefix.ToLowerInvariant();
+        var rows = await db.Profiles.AsNoTracking()
+            .Where(p => p.Handle.StartsWith(handlePrefix) || p.DisplayName.StartsWith(prefix))
+            .OrderBy(p => p.Handle)
+            .Take(take)
+            .ToListAsync(ct);
+        return [.. rows.Select(p => p.ToEntity())];
+    }
+
     public Task<bool> HandleTakenAsync(string handle, Guid exceptUserId, CancellationToken ct = default) =>
         db.Profiles.AnyAsync(p => p.Handle == handle && p.UserId != exceptUserId, ct);
 

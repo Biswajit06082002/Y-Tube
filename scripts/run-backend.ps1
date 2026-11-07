@@ -12,6 +12,8 @@ $projects = @(
     @{ Name = 'User       :5002'; Path = 'Services\User\User.Api' },
     @{ Name = 'Video      :5003'; Path = 'Services\Video\Video.Api' },
     @{ Name = 'Feed       :5004'; Path = 'Services\Feed\Feed.Api' },
+    @{ Name = 'Comment    :5005'; Path = 'Services\Comment\Comment.Api' },
+    @{ Name = 'Notification :5006'; Path = 'Services\Notification\Notification.Api' },
     @{ Name = 'Processing (worker)'; Path = 'Services\Processing\Processing.Worker' },
     @{ Name = 'Gateway    :5000'; Path = 'Gateway\YTube.Gateway' }
 )

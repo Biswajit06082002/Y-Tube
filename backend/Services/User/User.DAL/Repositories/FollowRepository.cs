@@ -7,25 +7,26 @@ namespace User.DAL.Repositories;
 
 public sealed class FollowRepository(UserDbContext db) : IFollowRepository
 {
-    public async Task SetFollowAsync(Guid followerId, Guid followeeId, bool follow, CancellationToken ct = default)
+    public async Task<bool> SetFollowAsync(Guid followerId, Guid followeeId, bool follow, CancellationToken ct = default)
     {
         if (follow)
         {
-            if (await IsFollowingAsync(followerId, followeeId, ct)) return;
+            if (await IsFollowingAsync(followerId, followeeId, ct)) return false;
             db.Follows.Add(new TFollow { FollowerId = followerId, FolloweeId = followeeId, CreatedAtUtc = DateTime.UtcNow });
             try
             {
                 await db.SaveChangesAsync(ct);
+                return true;
             }
             catch (DbUpdateException)
             {
                 db.ChangeTracker.Clear(); // a parallel request inserted it first — same end state
+                return false;
             }
         }
-        else
-        {
-            await db.Follows.Where(f => f.FollowerId == followerId && f.FolloweeId == followeeId).ExecuteDeleteAsync(ct);
-        }
+
+        await db.Follows.Where(f => f.FollowerId == followerId && f.FolloweeId == followeeId).ExecuteDeleteAsync(ct);
+        return false;
     }
 
     public Task<bool> IsFollowingAsync(Guid followerId, Guid followeeId, CancellationToken ct = default) =>
@@ -42,5 +43,11 @@ public sealed class FollowRepository(UserDbContext db) : IFollowRepository
             .Where(f => f.FollowerId == followerId)
             .OrderByDescending(f => f.CreatedAtUtc)
             .Select(f => f.FolloweeId)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> GetFollowerIdsAsync(Guid followeeId, CancellationToken ct = default) =>
+        await db.Follows.AsNoTracking()
+            .Where(f => f.FolloweeId == followeeId) // served by the FolloweeId index
+            .Select(f => f.FollowerId)
             .ToListAsync(ct);
 }

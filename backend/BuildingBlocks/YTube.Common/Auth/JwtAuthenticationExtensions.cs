@@ -39,6 +39,19 @@ public static class JwtAuthenticationExtensions
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = "email"
                 };
+
+                // Browsers can't set an Authorization header on a WebSocket, so the SignalR client sends
+                // the access token as ?access_token=… instead. Accept it only for real-time hub paths.
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var token = context.Request.Query["access_token"].ToString();
+                        if (!string.IsNullOrEmpty(token) && context.Request.Path.StartsWithSegments("/hubs"))
+                            context.Token = token;
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
         services.AddAuthorization();

@@ -12,4 +12,7 @@ public sealed record ProfileDto(
     bool IsFollowedByMe,
     bool IsMe);
 
+/// <summary>Just enough to show and link a user: @mention autocomplete and resolving @handles in comments.</summary>
+public sealed record ProfileSummaryDto(Guid UserId, string Handle, string DisplayName);
+
 public sealed record UpdateProfileRequest(string? DisplayName, string? Handle, string? Bio);

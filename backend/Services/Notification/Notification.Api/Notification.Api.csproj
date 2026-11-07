@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- API: controllers + startup only. References BLL/DAL so it can wire everything up with DI. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Notification.BLL\Notification.BLL.csproj" />
+    <ProjectReference Include="..\Notification.DAL\Notification.DAL.csproj" />
+    <ProjectReference Include="..\Notification.Entities\Notification.Entities.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Common\YTube.Common.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\YTube.Contracts\YTube.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.14" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

@@ -127,7 +127,21 @@ public sealed partial class ProfileService(
         if (followee is null)
             return Error.NotFound("channel_not_found", "This channel doesn't exist.");
 
-        await follows.SetFollowAsync(followerId, followeeId, follow, ct);
+        var created = await follows.SetFollowAsync(followerId, followeeId, follow, ct);
+        if (created)
+        {
+            var follower = await profiles.GetAsync(followerId, ct);
+            try
+            {
+                await publisher.PublishAsync(UserRoutingKeys.UserFollowed, new UserFollowed(
+                    followerId, follower?.DisplayName ?? "Someone", follower?.Handle ?? "", followeeId, DateTime.UtcNow), ct);
+            }
+            catch (Exception ex)
+            {
+                // The follow is saved; a missed "X followed you" notification isn't worth failing the request.
+                logger.LogWarning(ex, "Could not publish UserFollowed for {FollowerId} → {FolloweeId}", followerId, followeeId);
+            }
+        }
         return await ToDtoAsync(followee, followerId, ct);
     }
 
@@ -144,6 +158,31 @@ public sealed partial class ProfileService(
 
     public Task<IReadOnlyList<Guid>> GetFollowingIdsAsync(Guid userId, CancellationToken ct = default) =>
         follows.GetFolloweeIdsAsync(userId, ct);
+
+    public Task<IReadOnlyList<Guid>> GetFollowerIdsAsync(Guid userId, CancellationToken ct = default) =>
+        follows.GetFollowerIdsAsync(userId, ct);
+
+    public async Task<IReadOnlyList<ProfileSummaryDto>> GetByHandlesAsync(IEnumerable<string> handles, CancellationToken ct = default)
+    {
+        var normalised = handles
+            .Select(h => h.Trim().TrimStart('@').ToLowerInvariant())
+            .Where(h => HandlePattern().IsMatch(h))
+            .Distinct()
+            .Take(20) // a comment can't usefully mention more; also caps the IN (...) list
+            .ToList();
+        if (normalised.Count == 0) return [];
+
+        return [.. (await profiles.GetByHandlesAsync(normalised, ct)).Select(ToSummary)];
+    }
+
+    public async Task<IReadOnlyList<ProfileSummaryDto>> SearchAsync(string query, int take, CancellationToken ct = default)
+    {
+        var prefix = query.Trim().TrimStart('@');
+        if (prefix.Length == 0 || prefix.Length > 30) return [];
+        return [.. (await profiles.SearchAsync(prefix, Math.Clamp(take, 1, 10), ct)).Select(ToSummary)];
+    }
+
+    private static ProfileSummaryDto ToSummary(UserProfile p) => new(p.UserId, p.Handle, p.DisplayName);
 
     private async Task<ProfileDto> ToDtoAsync(UserProfile p, Guid? viewerId, CancellationToken ct) => new(
         p.UserId, p.Handle, p.DisplayName, p.Bio, p.JoinedAtUtc,

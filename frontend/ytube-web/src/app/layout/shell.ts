@@ -16,9 +16,11 @@ interface NavItem {
 }
 
 /** App frame: floating sidebar panel + frosted top bar around every browsing page. */
+import { NotificationBell } from './notification-bell';
+import { NotificationToast } from './notification-toast';
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, ChannelAvatar, Logo, ThemePicker],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, ChannelAvatar, Logo, ThemePicker, NotificationBell, NotificationToast],
   template: `
     <!-- Mobile backdrop for the drawer -->
     @if (drawerOpen()) {
@@ -127,6 +129,7 @@ interface NavItem {
             <button (click)="upload()" class="icon-btn" title="Upload" aria-label="Upload">
               <app-icon name="upload" />
             </button>
+            <app-notification-bell />
             <div class="relative">
               <button (click)="openMenu('account')" class="flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-fg/8" aria-label="Account menu">
                 <app-channel-avatar [name]="profiles.me()?.displayName ?? user.email" [size]="32" />
@@ -167,6 +170,11 @@ interface NavItem {
         <router-outlet />
       </main>
     </div>
+
+    <!-- Live notifications pop up here (signed-in users only) -->
+    @if (auth.isLoggedIn()) {
+      <app-notification-toast />
+    }
 
     <!-- "Sign in to …" dialog for login-only actions -->
     @if (prompt.prompt(); as p) {

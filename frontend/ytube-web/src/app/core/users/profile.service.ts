@@ -17,6 +17,12 @@ export interface Profile {
   isMe: boolean;
 }
 
+export interface ProfileSummary {
+  userId: string;
+  handle: string;
+  displayName: string;
+}
+
 export interface UpdateProfileInput {
   displayName?: string;
   handle?: string;
@@ -64,6 +70,11 @@ export class ProfileService {
     return unwrap(follow ? this.http.put<ApiResponse<Profile>>(url, null) : this.http.delete<ApiResponse<Profile>>(url)).pipe(
       tap(() => this.refreshMe()),
     );
+  }
+
+  /** @mention autocomplete: users whose @handle or name starts with the query. */
+  search(query: string): Observable<ProfileSummary[]> {
+    return unwrap(this.http.get<ApiResponse<ProfileSummary[]>>(`${this.api}/search`, { params: { q: query } }));
   }
 
   following(): Observable<Profile[]> {

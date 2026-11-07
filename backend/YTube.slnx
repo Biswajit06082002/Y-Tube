@@ -13,11 +13,23 @@
     <Project Path="Services/Auth/Auth.DAL/Auth.DAL.csproj" />
     <Project Path="Services/Auth/Auth.Entities/Auth.Entities.csproj" />
   </Folder>
+  <Folder Name="/Services/Comment/">
+    <Project Path="Services/Comment/Comment.Api/Comment.Api.csproj" />
+    <Project Path="Services/Comment/Comment.BLL/Comment.BLL.csproj" />
+    <Project Path="Services/Comment/Comment.DAL/Comment.DAL.csproj" />
+    <Project Path="Services/Comment/Comment.Entities/Comment.Entities.csproj" />
+  </Folder>
   <Folder Name="/Services/Feed/">
     <Project Path="Services/Feed/Feed.Api/Feed.Api.csproj" />
     <Project Path="Services/Feed/Feed.BLL/Feed.BLL.csproj" />
     <Project Path="Services/Feed/Feed.DAL/Feed.DAL.csproj" />
     <Project Path="Services/Feed/Feed.Entities/Feed.Entities.csproj" />
+  </Folder>
+  <Folder Name="/Services/Notification/">
+    <Project Path="Services/Notification/Notification.Api/Notification.Api.csproj" />
+    <Project Path="Services/Notification/Notification.BLL/Notification.BLL.csproj" />
+    <Project Path="Services/Notification/Notification.DAL/Notification.DAL.csproj" />
+    <Project Path="Services/Notification/Notification.Entities/Notification.Entities.csproj" />
   </Folder>
   <Folder Name="/Services/Processing/">
     <Project Path="Services/Processing/Processing.BLL/Processing.BLL.csproj" />

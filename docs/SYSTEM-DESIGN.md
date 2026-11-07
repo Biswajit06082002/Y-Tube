@@ -356,3 +356,202 @@ The UI updates **optimistically** (count changes instantly) and rolls back if th
 - **View rules are client-side** (5 s of playback); a determined script can still call the endpoint once per
   30 minutes per IP. Real platforms add bot detection on top.
 - **Sample channels** (seeded videos) have no account, so they have no channel page and can't be followed.
+
+---
+
+## Step 6 — Comments, replies and @mentions
+
+```
+Browser ─GET  /api/comments/video/{id}?cursor=… ─► Gateway ─► Comment service ─► YTube_CommentDb
+        ─POST /api/comments/video/{id} (JWT) ──► Gateway (rate limit 20/min) ─► Comment service
+                                                        ├─ HTTP ─► Video service  "does it exist, who's the creator?" (cached in Redis)
+                                                        ├─ HTTP ─► User service   "who am I?" + "which users are @a, @b?"
+                                                        └─ publish comment.user-mentioned ─► RabbitMQ (notifications later)
+User service ─ user.profile.updated ─► RabbitMQ ─► Comment service: rename the author on their comments
+```
+
+### 6.1 Why a separate Comment service?
+Comments are the busiest *write* path on a video site: one video, thousands of people typing. Keeping them out of the
+Video service means a comment flood can't slow down video metadata, the two can scale separately (more Comment
+instances, a different database later), and the Video database stays small. The price is that a few facts now live in
+another service, so the Comment service has to *ask* for them (6.3). Splitting by **workload**, not just by noun, is
+the usual reason to cut a new microservice.
+
+### 6.2 Data model: one table, one level of replies
+`Comments(Id bigint identity, VideoId, ParentId NULL, AuthorId, AuthorName, AuthorHandle, Text, ReplyCount, CreatedAtUtc, EditedAtUtc)`
+- A reply is just a comment with `ParentId`. Replies are **one level deep**: replying to a reply stores the
+  top-level comment as the parent. Unlimited nesting (Reddit-style) needs recursive queries and is hard to read on a phone.
+- **`ReplyCount` is stored**, not counted: a page of 20 comments would otherwise need 20 extra `COUNT(*)` queries.
+  It's updated with a relative `ReplyCount = ReplyCount + 1` inside the same transaction as the insert, so two
+  replies at the same moment can't overwrite each other (same idea as the view counter in step 5).
+- **Author name/@handle are copied** onto each comment (denormalised) and refreshed by the `user.profile.updated`
+  event, the same pattern as `ChannelName` on videos. Each service has its **own queue** for that event
+  (`video.user-events`, `comment.user-events`), so both get a copy: that's pub/sub with a topic exchange.
+- SQL Server won't cascade-delete a table onto itself, so deleting a comment deletes its replies explicitly in a transaction.
+- With connection retries turned on (`EnableRetryOnFailure`), a transaction must run inside
+  `CreateExecutionStrategy().ExecuteAsync(...)`, so a retry repeats the whole unit (insert + counter), never half of it.
+
+### 6.3 Talking to other services (and degrading gracefully)
+Posting needs to know three things: does the video exist (Video service), who is writing (User service), and which users the @handles
+belong to (User service). These are **synchronous HTTP calls** with a 5 s timeout, and the two independent ones run **in parallel**.
+- The **video's owner** is needed on every page of comments (Creator badge, delete rights), so it's cached in Redis for
+  10 minutes (**cache-aside**). One HTTP call per video per 10 minutes instead of one per page view.
+- If the User service is down while resolving mentions, the comment is still saved; the `@handles` just aren't
+  links. If the Video service is down while *reading*, comments still show, without the Creator badge.
+  That's **graceful degradation**: a dependency failing removes a feature, not the whole page.
+- If the Video service is down while *posting*, we return 503. We can't verify the video, and refusing is safer
+  than accepting comments on videos that may not exist.
+
+### 6.4 @mentions: resolve once, store the id
+Text like `@sam` is matched with a regex (`@` not preceded by a letter, so `me@mail.com` isn't a mention), the handles
+are looked up in **one** batched call (`/api/users/by-handles?handle=a&handle=b`), and the result is stored in
+`CommentMentions(CommentId, UserId, Handle)`. Storing the **user id** means the link still points at the right person
+if the handle is later taken by someone else, and the index on `UserId` makes "comments that mention me" a cheap query
+for the notifications page later.
+Autocomplete is a **prefix search** (`Handle LIKE 'sa%'`), which can use the unique index on `Handle`; a
+"contains" search (`'%sa%'`) would scan the whole table. The browser **debounces** it (waits 200 ms after typing stops)
+and ignores answers to outdated queries.
+
+### 6.5 Keyset (cursor) pagination
+Offset paging (`OFFSET 400 ROWS FETCH NEXT 20`) makes the database walk past 400 rows, and if new comments arrive while
+you scroll, the pages shift and you see duplicates. **Keyset paging** remembers the last id you saw:
+`WHERE VideoId = @v AND ParentId IS NULL AND Id < @cursor ORDER BY Id DESC`. The index
+`(VideoId, ParentId, Id)` jumps straight to the cursor, so page 1 and page 1000 cost the same, and new comments don't
+shift anything. We ask for **21 rows** to know whether a next page exists without a `COUNT`. The total is only counted on
+the first page. Trade-off: you can't jump to "page 37", which a comment list never needs.
+
+### 6.6 Abuse protection and safe rendering
+- The gateway rate-limits comment **writes** to 20 per minute per IP (reads only have the global limit).
+- Comments are rendered from **text segments**, never `innerHTML`, so `<script>` in a comment is shown as text (no XSS).
+  Links get `rel="noopener noreferrer nofollow"`; `nofollow` tells search engines not to reward spam links.
+- Authorization lives in the BLL: only the author edits; the author **or the video's creator** deletes.
+  Deleting is idempotent (deleting twice is still 200).
+
+### 6.7 Events for later
+Every new mention publishes `comment.user-mentioned`. Nobody listens yet, so RabbitMQ drops it. Publishing now means
+the notifications step (SignalR) only adds a consumer; the Comment service won't change.
+
+**Self-check questions**
+1. Why store `ReplyCount` instead of counting replies, and why `+ 1` in SQL instead of reading, adding and saving?
+2. What goes wrong with `OFFSET` paging on a busy comment section, and how does a cursor fix it?
+3. Why store the mentioned user's **id**, not just the `@handle` text?
+4. The User service is down. What still works when posting a comment, and what doesn't?
+5. Why does `LIKE 'sa%'` use an index while `LIKE '%sa%'` doesn't?
+6. Why do the Video and Comment services each need their own queue for `user.profile.updated`?
+
+### Known limits (to improve later)
+- **No comment likes or "Top comments" sort**: newest first only. Sorting by likes needs a score column and a
+  different index (and keyset paging on two columns).
+- **Mentions aren't notified yet**: the event is published but there's no consumer until the SignalR step.
+- **Rate limit is per IP**, so people behind one network share it; per-user limits (Redis counters) would be fairer.
+- **Video deletion** doesn't remove its comments yet (there's no delete-video feature); it would publish `video.deleted`
+  for the Comment service to clean up.
+- **Description @handles** are highlighted but not linked (only comments resolve mentions on save).
+
+---
+
+## Step 7 — Notifications and real-time push (SignalR)
+
+```
+Video   ── video.published ──┐
+User    ── user.followed ────┤                      ┌─ save one row per recipient ─► YTube_NotificationDb
+Comment ── comment.created ──┼─► RabbitMQ ─► Notification service ─┤
+Comment ── comment.user-mentioned ┘   (queue          │             └─ push live ─► SignalR hub ─► Redis backplane
+                                   notification.events) │                                              │
+                     HTTP: "who follows this creator?" ─► User service              Gateway (WebSocket) ◄┘
+                                                                                         │
+Browser: on sign-in GET /api/notifications (history) + connect /hubs/notifications (live) ◄┘
+```
+
+| Event | Who gets notified |
+|---|---|
+| A followed creator's video finishes processing (`video.published`) | every follower ("X uploaded: …") + the creator ("Your video is live") |
+| Someone follows you (`user.followed`) | you, once per follower |
+| `@you` in a comment (`comment.user-mentioned`) | you |
+| A reply in a thread you started (`comment.created`) | the thread's author |
+| A comment on your video (`comment.created`) | the creator |
+
+### 7.1 Event-driven: producers don't know about notifications
+The Video, User and Comment services just **publish facts** ("a video was published", "X followed Y"). They don't call
+the Notification service and don't know it exists. Adding notifications needed no `if (notify) …` in their business
+logic, and if the Notification service is down they keep working: the events wait in its durable queue. This is the
+main benefit of **pub/sub**: new consumers can be added without touching producers.
+
+### 7.2 Fan-out on write (again) — and why here
+A new video from a creator with 10 000 followers creates 10 000 notification rows. That's **fan-out on write**, the
+opposite of the Following feed (step 5, fan-out on read). Why the difference?
+- Notifications have **per-user state** (read/unread), so each person needs their own row anyway.
+- Opening the bell must be instant: `WHERE UserId = @me ORDER BY Id DESC` on an index, not "find everyone I follow,
+  then their videos, then which ones I've seen".
+- The write cost is paid **in the background** by a consumer, never by the uploader's request.
+Rows are inserted and pushed in chunks of 500 so a big channel doesn't build one giant transaction. Very large
+creators are where real systems switch to a hybrid (fan out lazily, or only to recently active followers).
+
+### 7.3 Idempotent consumer: the DedupKey
+RabbitMQ guarantees **at-least-once** delivery: after a crash or a lost ack, the same event comes again. Each
+notification gets a `DedupKey` describing its cause (`video:{id}`, `comment:{id}`, `follow:{followerId}`) and the table
+has a **unique index on (UserId, DedupKey)**. A redelivered event finds its rows already there and inserts nothing; only
+rows that were really inserted are pushed. (Tested by republishing a `video.published` by hand: no duplicate.)
+The same key gives us anti-spam for free: unfollow + follow again produces no second "X followed you".
+
+### 7.4 Store first, then push
+Every notification is **saved before it's pushed**. The push is best-effort: if the user is offline, or the push fails,
+nothing is lost — the browser loads `GET /api/notifications` when the app opens and again after every reconnect.
+Real-time is an *optimisation* on top of a reliable store, never the only copy.
+
+### 7.5 SignalR: how the live connection works
+- **Transport**: SignalR negotiates (`POST /hubs/notifications/negotiate`) and then upgrades to a **WebSocket** — one
+  long-lived connection the server can write to at any time. (Fallbacks: Server-Sent Events, long polling.)
+  Before this step the watch page *polled* every 2.5 s; polling is simple but wastes requests when nothing changes.
+- **Auth**: browsers can't put an `Authorization` header on a WebSocket, so the client sends the JWT as
+  `?access_token=…`. The shared JWT setup accepts the query-string token **only for `/hubs/*` paths**. Tokens in URLs can
+  end up in logs; our access tokens live 15 minutes, which limits the damage.
+- **Who is who**: `Clients.User(id)` reaches every connection of that user (several tabs, phone + laptop). SignalR finds
+  the user id through `IUserIdProvider`; ours reads the JWT's `sub` claim.
+- **Through the gateway**: YARP proxies WebSocket upgrades like any other request; the gateway validates the token
+  before the connection reaches the service (`hubs-route`, policy `default`).
+- **Token expiry**: a WebSocket is authenticated once, at connect. The client's `accessTokenFactory` refreshes the token
+  if it's about to expire, so every **reconnect** uses a fresh one.
+- **Reconnects**: automatic reconnect retries after 0, 2, 10 and 30 s; after that we keep retrying every 15 s. After
+  reconnecting the client **reloads the first page** to catch up on anything pushed while it was offline. (Tested:
+  stopped the Notification service, posted a mention, restarted it: the event waited in RabbitMQ and the bell updated
+  without a page reload.)
+
+### 7.6 Scaling out: the Redis backplane
+With two Notification instances behind a load balancer, Alice's WebSocket is on instance 1, but the event that concerns
+her may be consumed by instance 2. Instance 2 can't reach her connection directly. The **Redis backplane**
+(`AddStackExchangeRedis`) publishes every "send to user X" on Redis pub/sub; each instance delivers it to the
+connections it holds. WebSockets are also **sticky**: once open, all traffic for that connection must stay on the
+same instance (load balancers need sticky sessions for the negotiate step, or clients must skip negotiation).
+
+### 7.7 Cheap unread counts: a filtered index
+The badge asks "how many unread?" on every app load. `IX_Notifications_Unread` is a **filtered index**
+(`WHERE IsRead = 0`): it only contains unread rows, so it stays tiny however much history piles up, and
+`COUNT(*) WHERE UserId = @me AND IsRead = 0` reads just a few entries. Marking read always includes
+`AND UserId = @me`, so nobody can mark someone else's notifications by guessing ids.
+
+### 7.8 The dual-write problem, for real this time
+When processing completes, the Video service updates SQL **and** publishes `video.published`. If the process dies
+between the two, the video is live but nobody is notified. We reduce the risk (the publish happens inside the
+consumer of `video.processing.completed`, so a failure nacks that message and it can be replayed — and DedupKeys make a
+replay safe), but the clean fix is the **transactional outbox**: write the event into an `Outbox` table in the same SQL
+transaction as the update, and let a background job publish rows from it. That's in the Resilience phase.
+
+**Self-check questions**
+1. Why does the Following feed fan out on read but notifications fan out on write?
+2. RabbitMQ delivers `video.published` twice. Walk through why followers still get exactly one notification.
+3. Why save the notification before pushing it, instead of pushing first?
+4. How does the browser authenticate a WebSocket, and why is that only accepted on `/hubs/*`?
+5. With three Notification instances, how does a push reach a user connected to a different instance?
+6. Why does the client reload the first page after reconnecting?
+
+### Known limits (to improve later)
+- **No retention**: notifications are kept forever; production systems delete or archive after ~90 days.
+- **No grouping**: 50 comments on your video = 50 notifications (YouTube groups them: "Sam and 49 others…").
+- **No preferences**: you can't mute a channel or a notification type yet.
+- **Processing progress still polls** on the watch page; it could move to SignalR (a `video.processing.progress` push
+  to the uploader) the same way.
+- **Long-lived connections ignore token expiry/sign-out on other devices** until they reconnect; a server-side
+  "close connections for user X" on logout would fix it.
+- **Follower ids come from a synchronous call** to the User service; a creator with millions of followers needs paging
+  (or a follower read-model kept by events in the Notification service).

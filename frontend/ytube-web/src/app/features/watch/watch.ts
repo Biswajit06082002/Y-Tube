@@ -8,12 +8,14 @@ import { ChannelAvatar } from '../../shared/channel-avatar';
 import { compactNumber, countLabel, duration, timeAgo } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { VideoPlayer } from '../../shared/video-player';
+import { RichText } from '../../shared/rich-text';
 import { VideoThumbnail } from '../../shared/video-thumbnail';
+import { Comments } from './comments';
 
 /** Watch page: public to view; like / subscribe go through the sign-in gate. */
 @Component({
   selector: 'app-watch',
-  imports: [RouterLink, Icon, ChannelAvatar, VideoThumbnail, VideoPlayer],
+  imports: [RouterLink, Icon, ChannelAvatar, VideoThumbnail, VideoPlayer, RichText, Comments],
   template: `
     <div class="mx-auto flex max-w-[1600px] flex-col gap-6 pt-2 xl:flex-row">
       <section class="min-w-0 flex-1">
@@ -66,7 +68,6 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
             <div class="min-w-0">
               <span class="text-xs font-semibold tracking-wider text-accent uppercase">{{ v.category }}</span>
               <h1 class="mt-1 font-display text-2xl leading-tight font-bold tracking-tight">{{ v.title }}</h1>
-              <p class="mt-1 text-sm text-muted">{{ meta() }}</p>
             </div>
             <div class="flex items-center gap-2">
               <button
@@ -122,15 +123,35 @@ import { VideoThumbnail } from '../../shared/video-thumbnail';
                 </div>
               </div>
             }
-            <p class="w-full text-sm leading-relaxed whitespace-pre-line text-muted">{{ v.description }}</p>
-            @if (v.tags.length) {
-              <div class="flex w-full flex-wrap gap-1.5">
-                @for (tag of v.tags; track tag) {
-                  <span class="rounded-full bg-accent/12 px-2.5 py-1 text-xs font-medium text-accent">#{{ tag }}</span>
-                }
-              </div>
+          </div>
+
+          <!-- Description: collapsed to a few lines, the whole box expands on click (YouTube style) -->
+          <div
+            class="panel mt-4 p-4 text-sm transition"
+            [class.cursor-pointer]="!descriptionOpen()"
+            [class.hover:bg-fg/5]="!descriptionOpen()"
+            (click)="descriptionOpen.set(true)"
+          >
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
+              <span>{{ descriptionOpen() ? fullViews() : label(v.views, 'view') }}</span>
+              <span [title]="publishedOn()">{{ descriptionOpen() ? publishedOn() : ago(v.publishedAtUtc) }}</span>
+              @for (tag of v.tags; track tag) {
+                <span class="font-medium text-accent">#{{ tag }}</span>
+              }
+            </p>
+            @if (v.description) {
+              <app-rich-text class="mt-2 block leading-relaxed" [class.line-clamp-3]="!descriptionOpen()" [text]="v.description" />
+            } @else {
+              <p class="mt-2 text-muted italic">No description.</p>
+            }
+            @if (descriptionOpen()) {
+              <button type="button" class="mt-3 font-semibold text-muted transition hover:text-fg" (click)="$event.stopPropagation(); descriptionOpen.set(false)">Show less</button>
+            } @else if (descriptionIsLong()) {
+              <button type="button" class="mt-1 font-semibold text-muted transition hover:text-fg">…more</button>
             }
           </div>
+
+          <app-comments [videoId]="v.id" />
         } @else {
           <div class="aspect-video animate-pulse rounded-3xl bg-surface-2"></div>
           <div class="mt-5 h-7 w-2/3 animate-pulse rounded-lg bg-surface-2"></div>
@@ -173,6 +194,7 @@ export class Watch implements OnDestroy {
   protected readonly copied = signal(false);
   protected readonly creator = signal<Profile | null>(null);
   protected readonly followBusy = signal(false);
+  protected readonly descriptionOpen = signal(false);
 
   protected readonly stream = computed(() => mediaUrl(this.video()?.streamUrl));
   protected readonly poster = computed(() => mediaUrl(this.video()?.thumbnailUrl));
@@ -180,9 +202,19 @@ export class Watch implements OnDestroy {
 
   protected readonly likes = computed(() => compactNumber(this.video()?.likeCount ?? 0));
   protected readonly length = computed(() => duration(this.video()?.durationSeconds ?? 0));
-  protected readonly meta = computed(() => {
+
+  protected readonly fullViews = computed(() => {
+    const views = this.video()?.views ?? 0;
+    return `${views.toLocaleString('en')} ${views === 1 ? 'view' : 'views'}`;
+  });
+  protected readonly publishedOn = computed(() => {
     const v = this.video();
-    return v ? `${countLabel(v.views, 'view')} · ${timeAgo(v.publishedAtUtc)}` : '';
+    return v ? new Date(v.publishedAtUtc).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+  });
+  /** Only offer "…more" when there's something hidden. */
+  protected readonly descriptionIsLong = computed(() => {
+    const d = this.video()?.description ?? '';
+    return d.length > 220 || d.split('\n').length > 3;
   });
 
   protected readonly format = compactNumber;
@@ -284,6 +316,7 @@ export class Watch implements OnDestroy {
     this.video.set(null);
     this.creator.set(null);
     this.error.set(null);
+    this.descriptionOpen.set(false);
     window.scrollTo({ top: 0 });
 
     this.videos.video(id).subscribe({

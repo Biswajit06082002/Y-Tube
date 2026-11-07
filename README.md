@@ -12,7 +12,9 @@ Services run directly on the machine for now; full Docker support comes in a lat
 Angular (4200) ──► API Gateway (5000, YARP) ──► Auth  (5001) ── YTube_AuthDb, Redis
                     • JWT check at the edge       ├► User  (5002) ── YTube_UserDb, Redis
                     • rate limiting               ├► Video (5003) ── YTube_VideoDb, media files, serves /media
-                    • CORS, correlation ids       └► Feed  (5004) ── calls Video over HTTP
+                    • CORS, correlation ids       ├► Feed  (5004) ── calls Video over HTTP
+                                                  ├► Comment (5005) ── YTube_CommentDb, Redis, calls Video + User
+                                                  └► Notification (5006) ── YTube_NotificationDb, SignalR hub (+ Redis backplane)
                                                         │ ▲
                                     video.uploaded      ▼ │  video.processing.*
                                               RabbitMQ (5672, UI 15672)
@@ -32,6 +34,11 @@ Media on disk (outside the repo): D:\YTubeMedia\uploads (originals, private), D:
 | `/api/videos/liked`, `/api/videos/mine`, any non-GET on `/api/videos/**` (upload, like, unlike) | Video | yes |
 | `GET /media/**` (HLS playlists, segments, thumbnails) | Video | no |
 | `POST /api/videos/{id}/views` (counted after 5 s of playback, deduplicated per viewer) | Video | no |
+| `GET /api/users/search?q=` (@mention autocomplete) | User | no |
+| `GET /api/comments/**` (comments of a video, replies) | Comment | no |
+| any non-GET on `/api/comments/**` (post, reply, edit, delete) | Comment | yes (rate limited: 20/min per IP) |
+| `/api/notifications/**` (list, unread count, mark read) | Notification | yes |
+| `/hubs/notifications` (SignalR WebSocket, token as `?access_token=`) | Notification | yes |
 | `GET /api/feed/**`            | Feed    | no — home feed is public |
 | `/api/feed/subscriptions`     | Feed    | yes |
 
@@ -61,7 +68,7 @@ backend/
                                   publisher + consumer base, correlation-id + header propagation, error handler
   BuildingBlocks/YTube.Contracts  event messages shared between services (VideoUploaded, VideoProcessing…)
   Gateway/YTube.Gateway           YARP reverse proxy (routes in appsettings.json) — no business logic
-  Services/<Name>/                Auth, User, Video, Feed, Processing — each split into 4 layers:
+  Services/<Name>/                Auth, User, Video, Feed, Comment, Notification, Processing — each split into 4 layers:
     <Name>.Api                    controllers + Program.cs only (no logic); wires BLL + DAL via DI
                                   (Processing.Worker instead: a background host consuming RabbitMQ)
     <Name>.BLL                    all business logic (Services/) + the interfaces it needs (Interfaces/)
@@ -71,7 +78,7 @@ backend/
       Mappings/                   table model ⇄ entity conversion
       Repositories/               implement the BLL's repository interfaces
       Migrations/                 EF Core migrations
-      (Feed: Clients/ — its data comes over HTTP; Video: Storage/ — media files;
+      (Feed, Comment: Clients/ — calls to other services over HTTP; Video: Storage/ — media files;
        Processing: Ffmpeg/ + Storage/ — external tools and media files)
     <Name>.Entities               business entities + request/response DTOs the BLL works with; references nothing
 frontend/ytube-web                Angular 21 app
@@ -104,7 +111,7 @@ docker compose up -d                 # 1. Redis + RabbitMQ
 cd frontend\ytube-web; npm start     # 3. http://localhost:4200
 ```
 
-- All databases (Auth, User, Video) are created/migrated automatically on startup (Development only);
+- All databases (Auth, User, Video, Comment, Notification) are created/migrated automatically on startup (Development only);
   the Video DB is seeded with sample videos that have no media files.
 - Media is stored in `D:\YTubeMedia` (`Storage:RootPath` in Video.Api and Processing.Worker), never in the repo.
 - RabbitMQ management UI: http://localhost:15672 (ytube / ytube) — watch queues, messages and dead-letter queues.
@@ -153,13 +160,33 @@ dotnet ef migrations add <Name> --project Services/Auth/Auth.DAL --startup-proje
   videos (Feed service: User → Video, fan-out on read).
 - **Views**: Redis dedup (30 min per viewer) → Redis buffer → batched `Views = Views + n` to SQL every 10 s.
 
+## Comments, replies and @mentions
+
+- **Comment service** (5005, `YTube_CommentDb`) owns comments. Anyone can read; signed-in users post, reply,
+  edit their own comments and delete them. A video's creator can delete any comment on it and gets a **Creator** badge.
+- **Replies** are one level deep (like YouTube). Replying to a reply stays in the same thread, prefilled with `@handle`.
+- **@mentions**: type `@` + a letter for autocomplete (`GET /api/users/search`). On save, the Comment service
+  resolves `@handles` to user ids (User service) and stores them, so mentions link to the right channel.
+  Each new mention publishes `comment.user-mentioned` (for notifications in the SignalR step).
+- **Paging**: 20 comments per page with a cursor (`?cursor=<last id>`), loaded as you scroll.
+- **Description** on the watch page: collapsed to 3 lines, click to expand (full view count and date, clickable links).
+
+## Notifications (real time)
+
+- The **bell** in the top bar shows unread notifications; new ones also pop up as a toast, instantly, via **SignalR**.
+- You're notified when: a creator you follow publishes a video, your own upload is live, someone follows you,
+  @mentions you, replies in a thread you started, or comments on your video.
+- The **Notification service** (5006) consumes events from RabbitMQ (`video.published`, `user.followed`,
+  `comment.created`, `comment.user-mentioned`), saves one row per recipient (idempotent via a unique DedupKey) and pushes
+  it to the user's open connections. Offline users see everything next time they open the app.
+
 ## System design concepts — roadmap
 
 | Phase | Concepts | Status |
 |------|----------|--------|
 | 1. Foundation | API gateway, service decomposition, database per service, stateless JWT auth, refresh-token rotation, rate limiting, caching with TTL, health checks, correlation ids, centralized error handling | ✅ done |
 | 2. Core features | Video upload & metadata, media storage, HLS adaptive streaming, Feed, pagination, sync service-to-service calls | ✅ done (profiles/channels later) |
-| 3. Async & events | Message queue (RabbitMQ), pub/sub, idempotent consumers, background processing, dead-letter queues ✅ · SignalR real-time updates, outbox pattern | ⏳ next |
+| 3. Async & events | Message queue (RabbitMQ), pub/sub, idempotent consumers, background processing, dead-letter queues, SignalR real-time notifications + Redis backplane ✅ · outbox pattern | ⏳ outbox next |
 | 4. Scale | Cache-aside & invalidation, CQRS read models, read replicas, sharding/partitioning, CDN concepts | |
 | 5. Resilience | Retries, timeouts, circuit breaker (Polly), bulkheads, graceful degradation | |
 | 6. Observability | Structured logging, OpenTelemetry tracing, metrics, dashboards | |

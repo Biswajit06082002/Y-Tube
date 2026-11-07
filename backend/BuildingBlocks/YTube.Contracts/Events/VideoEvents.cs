@@ -10,6 +10,7 @@ public static class RoutingKeys
     public const string ProcessingProgress = "video.processing.progress";
     public const string ProcessingCompleted = "video.processing.completed";
     public const string ProcessingFailed = "video.processing.failed";
+    public const string VideoPublished = "video.published";
 }
 
 // Messages are the contract between services: they only carry data, never behaviour.
@@ -38,3 +39,15 @@ public sealed record VideoProcessingCompleted(
     string? ThumbnailPath);
 
 public sealed record VideoProcessingFailed(string VideoId, string Reason);
+
+/// <summary>
+/// Published by the Video service when an uploaded video becomes watchable (processing finished).
+/// The Notification service tells the creator and every follower.
+/// </summary>
+public sealed record VideoPublished(
+    string VideoId,
+    Guid OwnerId,
+    string ChannelName,
+    string Title,
+    string? ThumbnailUrl,
+    DateTime PublishedAtUtc);

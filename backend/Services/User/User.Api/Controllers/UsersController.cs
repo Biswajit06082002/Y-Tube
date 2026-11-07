@@ -49,6 +49,24 @@ public sealed class UsersController(IPreferencesService preferences, IProfileSer
             ? Ok(ApiResponse<ProfileDto>.Ok(profile))
             : NotFound(ApiResponse<ProfileDto>.Fail("channel_not_found", "This channel doesn't exist."));
 
+    /// <summary>@mention autocomplete. Public, like channel pages.</summary>
+    [AllowAnonymous]
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<ProfileSummaryDto>>.Ok(await profiles.SearchAsync(q ?? "", 6, ct)));
+
+    /// <summary>Resolves @handles to users (called by the Comment service: ?handle=a&amp;handle=b).</summary>
+    [AllowAnonymous]
+    [HttpGet("by-handles")]
+    public async Task<IActionResult> ByHandles([FromQuery(Name = "handle")] string[] handles, CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<ProfileSummaryDto>>.Ok(await profiles.GetByHandlesAsync(handles, ct)));
+
+    /// <summary>Follower ids of a creator — called by the Notification service to fan out new-video notifications.</summary>
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/followers/ids")]
+    public async Task<IActionResult> FollowerIds(Guid id, CancellationToken ct) =>
+        Ok(ApiResponse<IReadOnlyList<Guid>>.Ok(await profiles.GetFollowerIdsAsync(id, ct)));
+
     [HttpPut("{id:guid}/follow")]
     public async Task<IActionResult> Follow(Guid id, CancellationToken ct) =>
         (await profiles.SetFollowAsync(UserId, id, follow: true, ct)).ToActionResult();
